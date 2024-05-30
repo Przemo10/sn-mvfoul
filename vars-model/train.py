@@ -46,7 +46,7 @@ def trainer(train_loader,
             pbar=pbar,
         )
 
-        results = evaluate(os.path.join(path_dataset, "Train", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
         print("TRAINING")
         print(results)
 
@@ -62,7 +62,7 @@ def trainer(train_loader,
             set_name="valid"
         )
 
-        results = evaluate(os.path.join(path_dataset, "Valid", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
         print("VALIDATION")
         print(results)
 
@@ -79,7 +79,7 @@ def trainer(train_loader,
                 set_name="test",
             )
 
-        results = evaluate(os.path.join(path_dataset, "Test", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
         

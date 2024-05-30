@@ -108,12 +108,13 @@ def main(*args):
 
     logging.basicConfig(
         level=numeric_level,
-        format=
-        "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
+        format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
         handlers=[
             logging.FileHandler(log_path),
             logging.StreamHandler()
-        ])
+        ]
+    )
+
 
     # Initialize the data augmentation
     if data_aug == 'Yes':
@@ -144,23 +145,26 @@ def main(*args):
         print("We continue with r2plus1d_18")
     
     if only_evaluation == 0:
-        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Test', num_views = 5, 
+        print('Evaluation mode 0 - only test set ...')
+        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5,
         transform_model=transforms_model)
         
         test_loader2 = torch.utils.data.DataLoader(dataset_Test2,
             batch_size=1, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
     elif only_evaluation == 1:
-        dataset_Chall = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Chall', num_views = 5, 
+        print('Evaluation mode 1 - only chall set ...')
+        dataset_Chall = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='chall', num_views = 5,
         transform_model=transforms_model)
 
         chall_loader2 = torch.utils.data.DataLoader(dataset_Chall,
             batch_size=1, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
     elif only_evaluation == 2:
-        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Test', num_views = 5, 
+        print('Evaluation mode 2 ...')
+        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5,
         transform_model=transforms_model)
-        dataset_Chall = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Chall', num_views = 5, 
+        dataset_Chall = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='chall', num_views = 5,
         transform_model=transforms_model)
 
         test_loader2 = torch.utils.data.DataLoader(dataset_Test2,
@@ -171,13 +175,19 @@ def main(*args):
             batch_size=1, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
     else:
+
+        print('Dataset initialization- starts... ')
         # Create Train Validation and Test datasets
-        dataset_Train = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Train',
+        dataset_Train = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
             num_views = num_views, transform=transformAug, transform_model=transforms_model)
-        dataset_Valid2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Valid', num_views = 5, 
+        dataset_Valid2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid', num_views = 5,
             transform_model=transforms_model)
-        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='Test', num_views = 5, 
+        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5,
             transform_model=transforms_model)
+
+        print('Dataset initialization- finished')
+
+        print('Dataloaders initalization ...')
 
         # Create the dataloaders for train validation and test datasets
         train_loader = torch.utils.data.DataLoader(dataset_Train,
@@ -191,6 +201,8 @@ def main(*args):
         test_loader2 = torch.utils.data.DataLoader(dataset_Test2,
             batch_size=1, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
+
+        print('Dataloaders initalization - finished')
 
     ###################################
     #       LOADING THE MODEL         #
@@ -238,7 +250,7 @@ def main(*args):
             model,
             set_name="test",
         ) 
-        results = evaluate(os.path.join(path, "Test", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
 
@@ -249,7 +261,7 @@ def main(*args):
             set_name="chall",
         )
 
-        results = evaluate(os.path.join(path, "Chall", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path, "chall", "annotations.json"), prediction_file)
         print("CHALL")
         print(results)
 
@@ -260,7 +272,7 @@ def main(*args):
             set_name="test",
         )
 
-        results = evaluate(os.path.join(path, "Test", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
 
@@ -270,7 +282,7 @@ def main(*args):
             set_name="chall",
         )
 
-        results = evaluate(os.path.join(path, "Chall", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path, "chall", "annotations.json"), prediction_file)
         print("CHALL")
         print(results)
     else:

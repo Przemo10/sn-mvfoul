@@ -23,7 +23,7 @@ def label2vectormerge(folder_path, split, num_views):
 		with open(path_annotations) as f:
 			train_annotations_data = json.load(f)
 	else:
-		print("PATH DOES NOT EXISTS")
+		print(f"PATH {path_annotations} DOES NOT EXISTS")
 		exit()
 
 	not_taking = []

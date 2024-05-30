@@ -9,7 +9,7 @@ from torchvision.io.video import read_video
 class MultiViewDataset(Dataset):
     def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None):
 
-        if split != 'Chall':
+        if split != 'chall':
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity,self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
@@ -77,7 +77,7 @@ class MultiViewDataset(Dataset):
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
             cont = True
-            if self.split == 'Train':
+            if self.split == 'train':
                 while cont:
                     aux = random.randint(0,len(self.clips[index])-1)
                     if aux not in prev_views:
@@ -117,7 +117,7 @@ class MultiViewDataset(Dataset):
 
         videos = videos.permute(0, 2, 1, 3, 4)
 
-        if self.split != 'Chall':
+        if self.split != 'chall':
             return self.labels_offence_severity[index][0], self.labels_action[index][0], videos, self.number_of_actions[index]
         else:
             return -1, -1, videos, str(index)

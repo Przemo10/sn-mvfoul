@@ -1,6 +1,9 @@
 .idea
 .env
 vars-model/mvfouls/*
+vars-model/models/*
+__pycache__/
+config/__pycache__/
 vars-model/dataset/*.zip
 vars-model/dataset224p/*
 vars-model/dataset720p/*

@@ -38,6 +38,6 @@ Command for extracting zip files `dataset224p` (low resolution) or `dataset720p`
 ```bash
 7z x mvfouls/test.zip -o./dataset224p/test/
 7z x mvfouls/valid.zip -o./dataset224p/valid/
-7z x mvfouls/train.zip 7z x mvfouls/test.zip -o./dataset224p/train/
+7z x mvfouls/train.zip -o./dataset224p/train/
 7z x mvfouls/chalenge.zip 7z x -o./dataset224p/chalenge/
 ```
