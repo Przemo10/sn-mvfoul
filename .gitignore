@@ -10,3 +10,5 @@ vars-model/dataset720p/*
 dataset/*
 dataset224p/*
 dataset720p/*
+.ipynb_checkpoints
+../Evaluate/
