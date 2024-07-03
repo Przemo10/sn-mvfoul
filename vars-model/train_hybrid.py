@@ -7,6 +7,96 @@ from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 from tqdm import tqdm
 import einops
 from hybrid_model.mutulal_distilation_loss import MutualDistillationLoss
+import logging
+
+def trainer(train_loader,
+            val_loader2,
+            test_loader2,
+            model,
+            optimizer,
+            scheduler,
+            criterion,
+            best_model_path,
+            epoch_start,
+            model_name,
+            path_dataset,
+            max_epochs=1000
+            ):
+    logging.info("start training")
+    counter = 0
+
+    for epoch in range(epoch_start, max_epochs):
+
+        print(f"Epoch {epoch + 1}/{max_epochs}")
+
+        # Create a progress bar
+        pbar = tqdm(total=len(train_loader), desc="Training", position=0, leave=True)
+
+        ###################### TRAINING ###################
+        prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
+            train_loader,
+            model,
+            criterion,
+            optimizer,
+            epoch + 1,
+            model_name,
+            train=True,
+            set_name="train",
+            pbar=pbar,
+        )
+
+        results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
+        print("TRAINING")
+        print(results)
+        print(21)
+        ###################### VALIDATION ###################
+        prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
+            val_loader2,
+            model,
+            criterion,
+            optimizer,
+            epoch + 1,
+            model_name,
+            train=False,
+            set_name="valid"
+        )
+        print(22)
+        results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
+        print("VALIDATION")
+        print(results)
+
+        ###################### TEST ###################
+        prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
+            test_loader2,
+            model,
+            criterion,
+            optimizer,
+            epoch + 1,
+            model_name,
+            train=False,
+            set_name="test",
+        )
+
+        results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
+        print("TEST")
+        print(results)
+
+        scheduler.step()
+
+        counter += 1
+
+        if counter > 3:
+            state = {
+                'epoch': epoch + 1,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict()
+            }
+            path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
+            torch.save(state, path_aux)
+
+    pbar.close()
+    return
 
 
 def train(dataloader,
@@ -48,29 +138,49 @@ def train(dataloader,
             view_loss_offence_severity = torch.tensor(0.0)
             view_loss = torch.tensor(0.0)
             mutual_distillation_loss = torch.tensor(0.0)
+            print(action)
 
-            targets_offence_severity = targets_offence_severity.cuda()
-            targets_action = targets_action.cuda()
-            mvclips = mvclips.cuda().float()
+            #targets_offence_severity = targets_offence_severity.cuda()
+            #targets_action = targets_action.cuda()
+            #mvclips = mvclips.cuda().float()
+            criterion[0] = criterion[0].cpu()
+            criterion[1] = criterion[1].cpu()
+            # print(mvclips.shape)
 
             if pbar is not None:
                 pbar.update()
 
-            output = model(mvclips)
             print(mvclips.shape)
-            batch_size, total_views, _, _, _ = mvclips.shape
+
+            output = model(mvclips)
+            # print(output)
+            # print(mvclips.shape)
+            batch_size, total_views, _, _, _,_ = mvclips.shape
 
             for view_type in output:
                 outputs_offence_severity = output[view_type]['offence_logits']
-                outputs_action = output[view_type]['outputs_action']
+                outputs_action = output[view_type]['action_logits']
                 if view_type == 'single':
+                    # print(1.0, outputs_offence_severity.shape, outputs_action.shape)
+                    outputs_offence_severity = einops.rearrange(
+                        outputs_offence_severity,
+                        pattern='(b n) k -> b n k', b=batch_size, n=total_views)
+                    outputs_action = einops.rearrange(
+                        outputs_action,
+                        pattern='(b n) k -> b n k', b=batch_size, n=total_views)
+
+                    # print(2.0, outputs_offence_severity.shape, outputs_action.shape)
                     outputs_offence_severity = outputs_offence_severity.mean(dim=1)
-                    outputs_action - outputs_action.mean(dim=1)
+                    outputs_action = outputs_action.mean(dim=1)
+                    # print(3.0, outputs_offence_severity.shape, outputs_action.shape)
                 values = {}
                 actions[view_type] = {}
                 if len(action) == 1:
-                    preds_sev = torch.argmax(outputs_offence_severity, dim=0)
-                    preds_act = torch.argmax(outputs_action, dim=0)
+
+                    preds_sev = torch.argmax(outputs_offence_severity, dim=1)
+
+                    preds_act = torch.argmax(outputs_action, dim=1)
+
                     values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
                     if preds_sev.item() == 0:
                         values["Offence"] = "No offence"
@@ -88,22 +198,26 @@ def train(dataloader,
                 else:
                     preds_sev = torch.argmax(outputs_offence_severity, dim=1)
                     preds_act = torch.argmax(outputs_action, dim=1)
+                    # print(f'{view_type} preds_sev shape: {preds_sev.shape}, {preds_sev}')
+                    # print(f'{view_type} preds_act shape: {preds_sev}, {preds_sev}')
+                    # print(action)
 
                     for i in range(len(action)):
-                        values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
-                        if preds_sev.item() == 0:
+                        values = {}
+                        values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act[i].item()]
+                        if preds_sev[i].item() == 0:
                             values["Offence"] = "No offence"
                             values["Severity"] = ""
-                        elif preds_sev.item() == 1:
+                        elif preds_sev[i].item() == 1:
                             values["Offence"] = "Offence"
                             values["Severity"] = "1.0"
-                        elif preds_sev.item() == 2:
+                        elif preds_sev[i].item() == 2:
                             values["Offence"] = "Offence"
                             values["Severity"] = "3.0"
-                        elif preds_sev.item() == 3:
+                        elif preds_sev[i].item() == 3:
                             values["Offence"] = "Offence"
                             values["Severity"] = "5.0"
-
+                        actions[action[i]] = values
                         actions[view_type][action[i]] = values
                 if len(output['mv_collection']['offence_logits'].size()) == 1:
                     outputs_offence_severity = outputs_offence_severity.unsqueeze(0)
@@ -111,6 +225,10 @@ def train(dataloader,
                     outputs_action = outputs_action.unsqueeze(0)
 
                 # compute the loss
+
+                # print(view_type, outputs_offence_severity.shape, targets_offence_severity.shape)
+                # print(view_type, outputs_action.shape, targets_action.shape)
+                # print( outputs_offence_severity.get_device(), targets_offence_severity.get_device())
 
                 view_loss_offence_severity += criterion[0](outputs_offence_severity, targets_offence_severity)
                 view_loss_action += criterion[1](outputs_action, targets_action)
@@ -123,7 +241,7 @@ def train(dataloader,
                     n=total_views
                 )
                 single_action_logits = einops.rearrange(
-                    output['single']['offence_logits'],
+                    output['single']['action_logits'],
                     pattern='(b n) k -> b n k',
                     b=batch_size,
                     n=total_views
@@ -151,10 +269,15 @@ def train(dataloader,
             total_loss += 1
 
         gc.collect()
-        torch.cuda.empty_cache()
+        #torch.cuda.empty_cache()
+
 
     data["Actions"] = actions
     with open(os.path.join(model_name, prediction_file), "w") as outfile:
         json.dump(data, outfile)
-    return os.path.join(model_name,
-                        prediction_file), loss_total_action / total_loss, loss_total_offence_severity / total_loss
+    return (os.path.join(model_name,prediction_file),
+            loss_total_action / total_loss,
+            loss_total_offence_severity / total_loss,
+            loss_total_mutual_distillation / total_loss
+            )
+

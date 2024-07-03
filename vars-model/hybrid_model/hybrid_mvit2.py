@@ -10,16 +10,14 @@ class MultiVideoHybridMVit2(nn.Module):
     A hybrid model for handling multiple frames per video using MVit_v2_s.
 
     Args:
-        num_classes (int): Number of output classes.
         n (int): Number of views per sample.
         pretrained_weights (str): Path to the pretrained weights.
     """
 
-    def __init__(self, num_classes, n, pretrained_weights=None):
+    def __init__(self, num_views: int, pretrained_weights=None):
         super(MultiVideoHybridMVit2, self).__init__()
 
-        self.n = n
-        self.num_classes = num_classes
+        self.n = num_views
 
         # Initialize the base MVit_v2_s model
         weights = MViT_V2_S_Weights.DEFAULT if pretrained_weights is None else pretrained_weights
@@ -29,7 +27,7 @@ class MultiVideoHybridMVit2(nn.Module):
         self.org_dim = self.model.head[1].in_features
 
         # Initialize the learnable image embedding matrix
-        self.img_embed_matrix = nn.Parameter(torch.zeros(1, n, self.embed_dim), requires_grad=True)
+        self.img_embed_matrix = nn.Parameter(torch.zeros(1, self.n, self.embed_dim), requires_grad=True)
         nn.init.xavier_uniform_(self.img_embed_matrix)
 
         # Reuse the model head layer for classification tasks
@@ -39,8 +37,8 @@ class MultiVideoHybridMVit2(nn.Module):
         self.action_head = self.tmp_head
 
         # Initialize the classification head
-        self.fc_offence = nn.Linear(self.feet_dim, out_features=8)
-        self.fc_action = nn.Linear(self.feet_dim, out_features=4)
+        self.fc_offence = nn.Linear(self.feet_dim, out_features=4)
+        self.fc_action = nn.Linear(self.feet_dim, out_features=8)
 
         nn.init.zeros_(self.fc_offence.weight)
         nn.init.zeros_(self.fc_offence.bias)
@@ -62,12 +60,12 @@ class MultiVideoHybridMVit2(nn.Module):
         """
         # Initial shape of x: [batch_size * n, tokens, embed_dim]
         # Example initial shape: [8, 18817, 96]
-        print(f"Initial shape of x: {x.shape}")
+        # print(f"Initial shape of x: {x.shape}")
 
         # Rearrange the tensor to merge batch and frame dimensions
         x = einops.rearrange(x, '(b n) s c -> b (n s) c', b=batch_size, n=self.n)
         # Shape after rearrange: [4, 37634, 96] if n=2 (concatenating tokens for all frames per batch)
-        print(f"Shape after rearrange: {x.shape}")
+        # print(f"Shape after rearrange: {x.shape}")
 
         first_img_token_idx = 0
 
@@ -76,22 +74,22 @@ class MultiVideoHybridMVit2(nn.Module):
             for i in range(1, self.n):
                 excess_cls_index = i * tokens_per_frame + 1
                 x = torch.cat((x[:, :excess_cls_index], x[:, excess_cls_index + 1:]), dim=1)
-                print(f"Shape after removing cls token at frame {i}: {x.shape}")
+                # print(f"Shape after removing cls token at frame {i}: {x.shape}")
             first_img_token_idx = 1
             # Shape after removing excess cls tokens: [4, 37633, 96] if n=2 and cls tokens are removed
 
         # Normalize and add image embeddings
         image_embeddings = F.normalize(self.img_embed_matrix, dim=-1)
         # image_embeddings shape: [1, 2, 96] if n=2
-        print(f"Image embeddings shape: {image_embeddings.shape}")
+        # print(f"Image embeddings shape: {image_embeddings.shape}")
 
         # Repeat embeddings to match the number of tokens per frame
         repeated_embeddings = torch.repeat_interleave(image_embeddings, tokens_per_frame - first_img_token_idx, dim=1)
-        print(f"Repeated embeddings shape: {repeated_embeddings.shape}")
+        # print(f"Repeated embeddings shape: {repeated_embeddings.shape}")
 
         x[:, first_img_token_idx:] += repeated_embeddings
         # Shape after adding image embeddings: [4, 37633, 96] (no change in shape, just adding embeddings)
-        print(f"Shape after adding image embeddings: {x.shape}")
+        # print(f"Shape after adding image embeddings: {x.shape}")
 
         return x
 
@@ -116,28 +114,28 @@ class MultiVideoHybridMVit2(nn.Module):
         # Flatten the views into individual images
         x = einops.rearrange(x, 'b n c d h w -> (b n) c d h w')
         # Shape after rearrange: [8, 3, 11, 224, 224]
-        print(f"Shape after rearrange (views to individual images): {x.shape}")
+        # print(f"Shape after rearrange (views to individual images): {x.shape}")
 
         # Pass through the initial convolutional layers of MVIT to get patch embeddings
         x = self.model.conv_proj(x)
         # Shape after conv_proj: [8, 96, 6, 56, 56]
-        print(f"Shape after conv_proj: {x.shape}")
+        # print(f"Shape after conv_proj: {x.shape}")
 
         # Get the shape for temporal, height, and width dimensions
         init_thw_shape = x.shape[2:]  # Shape: [6, 56, 56]
         thw_shape = init_thw_shape
-        print(f"THW shape after conv_proj: {thw_shape}")
+        # print(f"THW shape after conv_proj: {thw_shape}")
 
         # Flatten the spatial dimensions and bring channels to the last dimension
         B, C, D, H, W = x.shape
-        print(B, C, D, H, W)
+        # print(B, C, D, H, W)
         x = x.view(B, C, D * H * W).transpose(1, 2)  # Now x has shape [batch_size, num_tokens, embed_dim]
         # Shape after view and transpose: [8, 18816, 96]
-        print(f"Shape after view and transpose: {x.shape}")
+        # print(f"Shape after view and transpose: {x.shape}")
 
         # Add positional encoding
         x = self.model.pos_encoding(x)
-        print(f"Shape after adding positional encoding: {x.shape}")
+        # print(f"Shape after adding positional encoding: {x.shape}")
 
         tokens_per_frame = x.shape[1]  # Number of tokens per frame
 
@@ -146,33 +144,33 @@ class MultiVideoHybridMVit2(nn.Module):
             if view_type == 'mv_collection':
                 tokens = self.format_multi_frame_tokens(tokens, batch_size, tokens_per_frame)
                 # Shape after format_multi_frame_tokens: [4, 37632, 96] if n=2
-                print(f"Shape after format_multi_frame_tokens: {tokens.shape}")
+                # print(f"Shape after format_multi_frame_tokens: {tokens.shape}")
                 # Update thw_shape after merging frames
                 thw_shape = (D * self.n, H, W)
-                print(f"Updated thw_shape for mv_collection: {thw_shape}")
+                # print(f"Updated thw_shape for mv_collection: {thw_shape}")
 
             # Sequentially pass the tokens through each block with the thw argument
             for block in self.model.blocks:
                 tokens, thw_shape = block(tokens, thw_shape)
-                print(tokens.shape, thw_shape)  # Debug print statement for shape tracking
+                # print(tokens.shape, thw_shape)  # Debug print statement for shape tracking
                 # Shape after each block will be [batch_size, num_tokens, embed_dim]
 
             tokens = self.model.norm(tokens)
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
-            print(f"Shape tokens after normalization: {tokens.shape}")
+            # print(f"Shape tokens after normalization: {tokens.shape}")
 
             selected_tokens = tokens[:, 0] # TO DO MIX
 
             offence_logits = self.offence_head(selected_tokens)
             action_logits = self.action_head(selected_tokens)
 
-            print(f"Offence tokens after head: {offence_logits.shape}")
-            print(f"Action tokens after head: {action_logits.shape}")
+            # print(f"Offence tokens after head: {offence_logits.shape}")
+            # print(f"Action tokens after head: {action_logits.shape}")
             offence_logits = self.fc_offence(offence_logits)
             action_logits = self.fc_action(action_logits)
             # Shape of logits: [batch_size, num_classes], e.g., [4, 10]
-            print(f"Offence logits shape: {offence_logits.shape}")
-            print(f"Action logits shape: {action_logits.shape}")
+            # print(f"Offence logits shape: {offence_logits.shape}")
+            # print(f"Action logits shape: {action_logits.shape}")
 
             output_dict[view_type]['offence_logits'] = offence_logits
             output_dict[view_type]['action_logits'] = action_logits
@@ -183,10 +181,10 @@ class MultiVideoHybridMVit2(nn.Module):
 
 # Usage example:
 # Initialize the model
-model = MultiVideoHybridMVit2(num_classes=10, n=4)
+#model = MultiVideoHybridMVit2(num_views=4)
 # Example input: [batch_size, num_views, channels, depth, height, width]
-videos = torch.randn(2, 4, 3, 10, 224, 224)
-output = model(videos)
-print(list(output.keys()))
-print(list(output['single'].keys()))
-print(output)
+#videos = torch.randn(2, 4, 3, 10, 224, 224)
+#output = model(videos)
+#print(list(output.keys()))
+#print(list(output['single'].keys()))
+#print(output)

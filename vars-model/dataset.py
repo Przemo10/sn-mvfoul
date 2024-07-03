@@ -13,6 +13,7 @@ class MultiViewDataset(Dataset):
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity,self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
+            self.clips = self.clips[:10]
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity, len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
 
@@ -77,7 +78,7 @@ class MultiViewDataset(Dataset):
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
             cont = True
-            if self.split == 'train':
+            if self.split != 'train2':
                 while cont:
                     aux = random.randint(0,len(self.clips[index])-1)
                     if aux not in prev_views:
