@@ -10,3 +10,6 @@ vars-model/dataset720p/*
 dataset/*
 dataset224p/*
 dataset720p/*
+models/VARS/*
+VARS/*
+runs/*
