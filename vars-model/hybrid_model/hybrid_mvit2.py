@@ -187,12 +187,15 @@ class MultiVideoHybridMVit2(nn.Module):
 
         return output_dict
 
-
 # Usage example:
 # Initialize the model
 #model = MultiVideoHybridMVit2(num_views=4)
 # Example input: [batch_size, num_views, channels, depth, height, width]
 #videos = torch.randn(2, 4, 3, 10, 224, 224)
+"""
+ (output_dict['single']['offence_logits'],output_dict['single']['action_logits'], 
+                output_dict['mv_collection']['offence_logits'], output_dict['mv_collection']['action_logits'])
+"""
 #output = model(videos)
 #print(list(output.keys()))
 #print(list(output['single'].keys()))

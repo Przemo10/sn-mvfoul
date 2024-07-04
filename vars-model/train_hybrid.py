@@ -130,22 +130,22 @@ def train(dataloader,
     data["Set"] = set_name
 
     actions = {}
-    md_loss = MutualDistillationLoss(temp=100, lambda_hyperparam=1.0)
+    md_loss = MutualDistillationLoss(temp=10, lambda_hyperparam=0.4)
 
-    if True:
+    with torch.set_grad_enabled(train):
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
 
-            view_loss_action = torch.tensor(0.0)
-            view_loss_offence_severity = torch.tensor(0.0)
-            view_loss = torch.tensor(0.0)
-            mutual_distillation_loss = torch.tensor(0.0)
+            view_loss_action = torch.tensor(0.0, dtype=torch.float16).cuda()
+            view_loss_offence_severity = torch.tensor(0.0, dtype=torch.float16).cuda()
+            view_loss = torch.tensor(0.0, dtype=torch.float16).cuda()
+            mutual_distillation_loss = torch.tensor(0.0, dtype=torch.float16).cuda()
 
-            #targets_offence_severity = targets_offence_severity.cuda()
-            #targets_action = targets_action.cuda()
-            #mvclips = mvclips.cuda().float()
-            criterion[0] = criterion[0].cpu()
-            criterion[1] = criterion[1].cpu()
-            # print(mvclips.shape)
+            targets_offence_severity = targets_offence_severity.cuda()
+            targets_action = targets_action.cuda()
+            mvclips = mvclips.cuda().float()
+            #criterion[0] = criterion[0].cpu()
+            # criterion[1] = criterion[1].cpu()
+            # print(mvclips.shape), dtype=torch.float16
 
             if pbar is not None:
                 pbar.update()
@@ -175,8 +175,8 @@ def train(dataloader,
 
                 if len(action) == 1:
                     values = {}
-                    preds_sev = torch.argmax(outputs_offence_severity, dim=1)
-                    preds_act = torch.argmax(outputs_action, dim=1)
+                    preds_sev = torch.argmax(outputs_offence_severity.detach().cpu(), dim=1)
+                    preds_act = torch.argmax(outputs_action.detach().cpu(), dim=1)
                     values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
                     if preds_sev.item() == 0:
                         values["Offence"] = "No offence"
@@ -192,8 +192,8 @@ def train(dataloader,
                         values["Severity"] = "5.0"
                     actions[action[0]] = values
                 else:
-                    preds_sev = torch.argmax(outputs_offence_severity, dim=1)
-                    preds_act = torch.argmax(outputs_action, dim=1)
+                    preds_sev = torch.argmax(outputs_offence_severity.detach().cpu(), dim=1)
+                    preds_act = torch.argmax(outputs_action.detach().cpu(), dim=1)
                     # print(f'{view_type} preds_sev shape: {preds_sev.shape}, {preds_sev}')
                     # print(f'{view_type} preds_act shape: {preds_sev}, {preds_sev}')
                     # print(action)
@@ -225,8 +225,8 @@ def train(dataloader,
                 # print(view_type, outputs_action.shape, targets_action.shape)
                 # print( outputs_offence_severity.get_device(), targets_offence_severity.get_device())
                 if view_type == 'single':
-                    view_loss_offence_severity += torch.tensor(0.1) * criterion[0](outputs_offence_severity, targets_offence_severity)
-                    view_loss_action += torch.tensor(0.3) * criterion[1](outputs_action, targets_action)
+                    view_loss_offence_severity += torch.tensor(0.1).cuda() * criterion[0](outputs_offence_severity, targets_offence_severity)
+                    view_loss_action += torch.tensor(0.3).cuda() * criterion[1](outputs_action, targets_action)
                     view_loss = view_loss + view_loss_action + view_loss_offence_severity
 
                 if view_type == 'mv_collection':
@@ -261,15 +261,16 @@ def train(dataloader,
             if train:
                 optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 80.0)
                 optimizer.step()
 
             loss_total_action += float(view_loss_action)
             loss_total_offence_severity += float(view_loss_offence_severity)
             loss_total_mutual_distillation += float(mutual_distillation_loss)
             total_loss += 1
-
         gc.collect()
-        #torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
+
 
 
     data["Actions"] = actions

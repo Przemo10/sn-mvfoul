@@ -160,7 +160,7 @@ def main(*args):
 
     # Create the dataloaders for train validation and test datasets
     train_loader = DataLoader(dataset_Train, batch_size=batch_size, shuffle=False,
-                              num_workers=max_num_worker, pin_memory=False)
+                              num_workers=max_num_worker, pin_memory=True)
 
     val_loader2 = DataLoader(dataset_Valid2,
                              batch_size=1, shuffle=False,
@@ -175,7 +175,7 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-    model = MultiVideoHybridMVit2(num_views=num_views).cpu()
+    model = MultiVideoHybridMVit2(num_views=num_views).cuda()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -188,7 +188,12 @@ def main(*args):
                                       betas=(0.9, 0.999), eps=1e-07,
                                       weight_decay=weight_decay, amsgrad=False)
 
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer=optimizer, max_lr=args.lr,
+                                                        epochs=args.num_epochs,
+                                                        div_factor=10,
+                                                        steps_per_epoch=len(dataset_Train) // args.batch_size,
+                                                        final_div_factor=1000,
+                                                        pct_start=5 / args.num_epochs, anneal_strategy='cos')
 
         epoch_start = 0
 
@@ -222,7 +227,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
     parser.add_argument('--model_name', required=False, type=str, default="VARS_HYBRID", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
-    parser.add_argument('--LR', required=False, type=float, default=1e-04, help='Learning Rate')
+    parser.add_argument('--LR', required=False, type=float, default=1e-02, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
     parser.add_argument('--max_num_worker', required=False, type=int, default=1, help='number of worker to load data')
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
