@@ -233,7 +233,7 @@ if __name__ == '__main__':
                         help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="max",
                         help="Which type of pooling should be done")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
+    parser.add_argument("--weighted_loss", required=False, type=str, default="No",
                         help="If the loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")

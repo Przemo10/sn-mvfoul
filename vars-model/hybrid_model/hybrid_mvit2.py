@@ -46,6 +46,10 @@ class MultiVideoHybridMVit2(nn.Module):
         nn.init.zeros_(self.fc_action.weight)
         nn.init.zeros_(self.fc_action.bias)
 
+    def freeze_blocks(self, freeze: bool):
+        for param in self.model.blocks.parameters():
+            param.requires_grad = freeze
+
     def format_multi_frame_tokens(self, x, batch_size, tokens_per_frame):
         """
         Formats the tokens for multiple frames.
@@ -148,6 +152,9 @@ class MultiVideoHybridMVit2(nn.Module):
                 # Update thw_shape after merging frames
                 thw_shape = (D * self.n, H, W)
                 # print(f"Updated thw_shape for mv_collection: {thw_shape}")
+                self.freeze_blocks(freeze=False)
+            else:
+                self.freeze_blocks(freeze=True)
 
             # Sequentially pass the tokens through each block with the thw argument
             for block in self.model.blocks:
@@ -159,7 +166,7 @@ class MultiVideoHybridMVit2(nn.Module):
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
             # print(f"Shape tokens after normalization: {tokens.shape}")
 
-            selected_tokens = tokens[:, 0] # TO DO MIX
+            selected_tokens = torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
 
             offence_logits = self.offence_head(selected_tokens)
             action_logits = self.action_head(selected_tokens)
@@ -175,6 +182,8 @@ class MultiVideoHybridMVit2(nn.Module):
             output_dict[view_type]['offence_logits'] = offence_logits
             output_dict[view_type]['action_logits'] = action_logits
             # output_dict[view_type]['tokens'] = tokens
+
+        self.freeze_blocks(freeze=False)
 
         return output_dict
 

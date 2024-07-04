@@ -13,7 +13,7 @@ class MultiViewDataset(Dataset):
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity,self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
-            self.clips = self.clips[:10]
+            self.clips = self.clips
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity, len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
 
@@ -123,5 +123,5 @@ class MultiViewDataset(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return self.length
+        return 10 # self.length
 
