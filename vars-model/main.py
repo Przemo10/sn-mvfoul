@@ -15,8 +15,6 @@ from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights, MViT_V1_B_Weights
 from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights, mvit_v1_b, MViT_V1_B_Weights
-from dataset_readers.mae_dataset import MultiViewMAEDataset
-from custom_models.video_mae import VideoMAENetwork
 
 
 def checkArguments():
@@ -141,7 +139,7 @@ def main(*args):
     elif pre_model == "mvit_v2_s":
         transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
     else:
-        transforms_model = None
+        transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         print("Warning: Could not find the desired pretrained model")
         print("Possible options are: r3d_18, s3d, mc3_18, mvit_v2_s and r2plus1d_18")
         print("We continue with r2plus1d_18")
@@ -180,15 +178,12 @@ def main(*args):
 
         print('Dataset initialization- starts... ')
         # Create Train Validation and Test datasets
-
-
-
         dataset_Train = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
             num_views = num_views, transform=transformAug, transform_model=transforms_model)
-        dataset_Train = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
-            num_views = num_views, transform=transformAug)
-        dataset_Valid2 = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid', num_views = 5)
-        dataset_Test2 = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5)
+        dataset_Valid2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid', num_views = 5,
+            transform_model=transforms_model)
+        dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5,
+            transform_model=transforms_model)
 
         print('Dataset initialization- finished')
 
@@ -212,8 +207,7 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-    # model = MVNetwork(net_name=pre_model, agr_type=pooling_type).cuda()
-    model = VideoMAENetwork().cuda()
+    model = MVNetwork(net_name=pre_model, agr_type=pooling_type).cuda()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -313,7 +307,7 @@ if __name__ == '__main__':
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
-    parser.add_argument("--pre_model", required=False, type=str, default="r2plus1d_18", help="Name of the pretrained model")
+    parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="max", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
