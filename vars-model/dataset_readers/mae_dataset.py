@@ -6,6 +6,7 @@ from data_loader import label2vectormerge, clips2vectormerge
 from torchvision.io.video import read_video
 from data_loader import get_ordered_random_indices
 from transformers import AutoImageProcessor
+from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights
 import numpy as np
 import cv2
 
@@ -49,7 +50,12 @@ class MultiViewMAEDataset(Dataset):
         self.start = start
         self.end = end
         self.transform = transform
-        self.transform_model = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        self.crop_margin = True
+
+        self.transform_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
+        if transform is not None:
+            self.transform_model.mean = [0.485, 0.456, 0.406]
+            self.transform_model.std = [ 0.229, 0.224, 0.225]
         self.num_views = num_views
         self.model_frames = 16
         self.fps = fps
@@ -87,7 +93,7 @@ class MultiViewMAEDataset(Dataset):
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
             cont = True
-            if self.split != 'train':
+            if self.split == 'train':
                 while cont:
                     aux = random.randint(0, len(self.clips[index]) - 1)
                     if aux not in prev_views:
@@ -113,25 +119,28 @@ class MultiViewMAEDataset(Dataset):
             # Release the VideoCapture object
             cap.release()
 
-            print(video_np.shape)
 
             if self.fps != 16:
                 indices = get_ordered_random_indices(self.fps)
                 final_frames = video_np[indices, :, :, :]
             else:
                 final_frames = video_np[self.start:self.end, :, :, :]
-            print(final_frames.shape)
+            if self.crop_margin:
+                final_frames = final_frames[:,25:, 25:, :]
 
-            final_frames = self.transform_model(list(final_frames), return_tensors="pt")['pixel_values']
-            print(final_frames.shape)
+            final_frames = torch.tensor(final_frames).permute(0,3,1,2)
 
+            if self.transform:
+                final_frames = self.transform(final_frames)
 
-            print(final_frames.shape)
+            final_frames = self.transform_model(final_frames)
+            final_frames = final_frames.permute(1,0,2,3)
+
             if num_view == 0:
-                videos = final_frames
+                videos = final_frames.unsqueeze(0)
             else:
-                videos = torch.cat((videos, final_frames), 0)
-                print(videos.shape)
+
+                videos = torch.cat((videos, final_frames.unsqueeze(0)), 0)
 
         if self.num_views != 1 and self.num_views != 5:
             videos = videos.squeeze()

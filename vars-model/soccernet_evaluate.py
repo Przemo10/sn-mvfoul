@@ -89,11 +89,11 @@ def evaluate(ground_truth_file, predictions_file):
     leaderboard_value = balanced_accuracy_offence_severity * 0.5 + balanced_accuracy_action * 0.5
 
     results = {
-        "accuracy_offence_severity": accuracy_offence_severity * 100,
-        "accuracy_action": accuracy_action * 100,
-        "balanced_accuracy_offence_severity": balanced_accuracy_offence_severity * 100,
-        "balanced_accuracy_action": balanced_accuracy_action * 100,
-        "leaderboard_value": leaderboard_value * 100
+        "accuracy_offence_severity": round(accuracy_offence_severity * 100,4),
+        "accuracy_action": round(accuracy_action * 100,4),
+        "balanced_accuracy_offence_severity": round(balanced_accuracy_offence_severity * 100,4),
+        "balanced_accuracy_action": round(balanced_accuracy_action * 100,4),
+        "leaderboard_value": round(leaderboard_value * 100,4),
     }
 
     return results

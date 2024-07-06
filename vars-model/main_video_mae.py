@@ -9,7 +9,7 @@ from dataset import MultiViewDataset
 from train import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
-from model import MVNetwork
+from custom_models.video_mae import VideoMAENetwork
 from dataset_readers.mae_dataset import MultiViewMAEDataset
 
 
@@ -159,7 +159,7 @@ def main(*args):
                                                num_workers=max_num_worker, pin_memory=True)
 
     print('Dataloaders initalization - finished')
-    model = MVNetwork(net_name="video_mae", agr_type=pooling_type).cuda()
+    model = VideoMAENetwork().cuda()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)

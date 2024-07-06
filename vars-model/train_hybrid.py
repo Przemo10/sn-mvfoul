@@ -47,9 +47,10 @@ def trainer(train_loader,
         )
 
         results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
-        print("TRAINING")
+        print(f"TRAINING: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ,"
+              f"loss_distil: {round(loss_mutual_distillation,10)}")
         print(results)
-        print(21)
+
         ###################### VALIDATION ###################
         prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
             val_loader2,
@@ -61,9 +62,9 @@ def trainer(train_loader,
             train=False,
             set_name="valid"
         )
-        print(22)
         results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
-        print("VALIDATION")
+        print(f"VALIDATION loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ,"
+              f"loss_distil: {round(loss_mutual_distillation, 10)}")
         print(results)
 
         ###################### TEST ###################
@@ -79,7 +80,8 @@ def trainer(train_loader,
         )
 
         results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
-        print("TEST")
+        print(f"TEST: loss_action: {round(loss_action,6)}, loss_offence: {round(loss_offence_severity,6)},"
+              f" loss_distil: {round(loss_mutual_distillation, 10)}")
         print(results)
 
         # scheduler.step()
