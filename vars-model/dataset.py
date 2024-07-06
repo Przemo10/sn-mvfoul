@@ -124,4 +124,3 @@ class MultiViewDataset(Dataset):
 
     def __len__(self):
         return self.length
-

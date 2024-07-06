@@ -3,6 +3,7 @@ import os
 import torch
 import json
 from config.classes import EVENT_DICTIONARY
+import numpy as np
 
 ##############################################################
 #                                                            #
@@ -185,3 +186,11 @@ def clips2vectormerge(folder_path, split, num_views, not_taking):
 		return clips
 
 
+def get_ordered_random_indices(num_frames, clip_len=16):
+	if num_frames < clip_len:
+		raise ValueError(f"Number of frames is less than {clip_len}.")
+	elif num_frames == clip_len:
+		return np.arange(clip_len)
+	else:
+		indices = np.sort(np.random.choice(num_frames, clip_len, replace=False))
+		return indices
