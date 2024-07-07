@@ -37,14 +37,18 @@ class MultiVideoHybridMVit2(nn.Module):
         self.action_head = self.tmp_head
 
         # Initialize the classification head
-        self.fc_offence = nn.Linear(self.feet_dim, out_features=4)
-        self.fc_action = nn.Linear(self.feet_dim, out_features=8)
+        # self.fc_offence = nn.Linear(self.feet_dim, out_features=4)
+        # self.fc_action = nn.Linear(self.feet_dim, out_features=8)
 
-        nn.init.zeros_(self.fc_offence.weight)
-        nn.init.zeros_(self.fc_offence.bias)
-
-        nn.init.zeros_(self.fc_action.weight)
-        nn.init.zeros_(self.fc_action.bias)
+        self.fc_offence = nn.Sequential(
+            nn.Identity(),
+            nn.Dropout(p=0.1),
+            nn.Linear(768, 4)
+        )
+        self.fc_action = nn.Sequential(
+            nn.Dropout(p=0.1),
+            nn.Linear(768, 8)
+        )
 
     def freeze_blocks(self, freeze: bool):
         for param in self.model.blocks.parameters():
@@ -85,7 +89,7 @@ class MultiVideoHybridMVit2(nn.Module):
         # Normalize and add image embeddings
         image_embeddings = F.normalize(self.img_embed_matrix, dim=-1)
         # image_embeddings shape: [1, 2, 96] if n=2
-        # print(f"Image embeddings shape: {image_embeddings.shape}")
+        #print(f"Image embeddings shape: {image_embeddings.shape}")
 
         # Repeat embeddings to match the number of tokens per frame
         repeated_embeddings = torch.repeat_interleave(image_embeddings, tokens_per_frame - first_img_token_idx, dim=1)
@@ -154,7 +158,7 @@ class MultiVideoHybridMVit2(nn.Module):
                 # print(f"Updated thw_shape for mv_collection: {thw_shape}")
                 self.freeze_blocks(freeze=False)
             else:
-                self.freeze_blocks(freeze=True)
+                self.freeze_blocks(freeze=False)
 
             # Sequentially pass the tokens through each block with the thw argument
             for block in self.model.blocks:
@@ -164,24 +168,18 @@ class MultiVideoHybridMVit2(nn.Module):
 
             tokens = self.model.norm(tokens)
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
-            # print(f"Shape tokens after normalization: {tokens.shape}")
+            # print(f"Shape {view_type} tokens after normalization: {tokens.shape}")
 
-            selected_tokens = torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
+            selected_tokens = torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
 
-            offence_logits = self.offence_head(selected_tokens)
-            action_logits = self.action_head(selected_tokens)
-
-            # print(f"Offence tokens after head: {offence_logits.shape}")
-            # print(f"Action tokens after head: {action_logits.shape}")
-            offence_logits = self.fc_offence(offence_logits)
-            action_logits = self.fc_action(action_logits)
+            offence_logits = self.fc_offence(selected_tokens)
+            action_logits = self.fc_action(selected_tokens)
             # Shape of logits: [batch_size, num_classes], e.g., [4, 10]
             # print(f"Offence logits shape: {offence_logits.shape}")
             # print(f"Action logits shape: {action_logits.shape}")
 
             output_dict[view_type]['offence_logits'] = offence_logits
             output_dict[view_type]['action_logits'] = action_logits
-            # output_dict[view_type]['tokens'] = tokens
 
         self.freeze_blocks(freeze=False)
 
@@ -189,14 +187,15 @@ class MultiVideoHybridMVit2(nn.Module):
 
 # Usage example:
 # Initialize the model
-#model = MultiVideoHybridMVit2(num_views=4)
+# model = MultiVideoHybridMVit2(num_views=2)
 # Example input: [batch_size, num_views, channels, depth, height, width]
-#videos = torch.randn(2, 4, 3, 10, 224, 224)
+#videos = torch.randn(4, 2, 3, 16, 224, 224)
 """
  (output_dict['single']['offence_logits'],output_dict['single']['action_logits'], 
                 output_dict['mv_collection']['offence_logits'], output_dict['mv_collection']['action_logits'])
 """
-#output = model(videos)
+
 #print(list(output.keys()))
 #print(list(output['single'].keys()))
 #print(output)
+# model(videos)
