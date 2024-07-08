@@ -1,4 +1,4 @@
-from utils import batch_tensor, unbatch_tensor
+from src.utils import batch_tensor, unbatch_tensor
 import torch
 from torch import nn
 

@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 from random import random
 import torch
 import random
-from dataset_readers.data_loader import label2vectormerge, clips2vectormerge
+from src.custom_dataset.data_loader import label2vectormerge, clips2vectormerge
 from torchvision.io.video import read_video
 
 

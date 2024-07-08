@@ -4,11 +4,11 @@ import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from train import trainer, evaluation
+from src.custom_trainers.train_videomae import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
-from custom_models.video_mae import VideoMAENetwork
-from dataset_readers.mae_dataset import MultiViewMAEDataset
+from src.custom_model.video_mae import VideoMAENetwork
+from src.custom_dataset.video_mae_dataset import MultiViewMAEDataset
 
 
 
@@ -143,7 +143,7 @@ def main(*args):
 
     # Create the dataloaders for train validation and test datasets
     train_loader = torch.utils.data.DataLoader(dataset_Train,
-                                               batch_size=batch_size, shuffle=True,
+                                               batch_size=batch_size, shuffle=False,
                                                num_workers=max_num_worker, pin_memory=True)
 
     val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,
@@ -155,7 +155,7 @@ def main(*args):
                                                num_workers=max_num_worker, pin_memory=True)
 
     print('Dataloaders initalization - finished')
-    model = VideoMAENetwork().cuda()
+    model = VideoMAENetwork()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -221,13 +221,13 @@ if __name__ == '__main__':
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
-    parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
+    parser.add_argument("--data_aug", required=False, type=str, default="No", help="Data augmentation")
     parser.add_argument("--pre_model", required=False, type=str, default="video_mae",
                         help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean",
                         help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="No",
-                        help="If the loss should be weighted")
+                        help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")

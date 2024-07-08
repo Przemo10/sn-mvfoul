@@ -4,11 +4,11 @@ import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from dataset_readers.dataset import MultiViewDataset
-from train import trainer, evaluation
+from src.custom_dataset.baseline_dataset import MultiViewDataset
+from src.custom_trainers.train import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
-from model import MVNetwork
+from src.custom_model.baseline_model import MVNetwork
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
@@ -306,7 +306,7 @@ if __name__ == '__main__':
     parser.add_argument("--data_aug", required=False, type=str, default="No", help="Data augmentation")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the loss should be weighted")
+    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")

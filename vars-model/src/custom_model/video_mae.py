@@ -1,7 +1,7 @@
 import torch
 from transformers import VideoMAEForVideoClassification
 from torch import  nn
-from utils import batch_tensor, unbatch_tensor
+from src.utils import batch_tensor, unbatch_tensor
 
 
 class VideoMAENetwork(torch.nn.Module):

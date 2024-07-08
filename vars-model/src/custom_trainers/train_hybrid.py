@@ -3,19 +3,13 @@ import torch
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
-# from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
-from soccernet_evaluate import evaluate
+from src.soccernet_evaluate import evaluate
 from tqdm import tqdm
 import einops
-from hybrid_model.mutulal_distilation_loss import MutualDistillationLoss
+from src.custom_loss.mutulal_distilation_loss import MutualDistillationLoss
 import logging
+from config.label_map import OFFENCE_SEVERITY_MAP
 
-OFFENCE_SEVERITY_MAP = {
-    0: ("No offence", ""),
-    1: ("Offence", "1.0"),
-    2: ("Offence", "3.0"),
-    3: ("Offence", "5.0")
-}
 
 def trainer(train_loader,
             val_loader2,
@@ -222,8 +216,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                     outputs_offence_severity = outputs_offence_severity.unsqueeze(0)
                 if len(output['mv_collection']['action_logits'].size()) == 1:
                     outputs_action = outputs_action.unsqueeze(0)
-
-                # compute the loss
+                # compute the custom_loss
                 if view_type == 'single':
                     view_loss_offence_severity += criterion[0](outputs_offence_severity, targets_offence_severity)
                     view_loss_action += criterion[1](outputs_action, targets_action)
@@ -243,7 +236,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                                                            single_offence_logits, targets_offence_severity[:,0])
                 mutual_distillation_action_loss = md_loss(output['mv_collection']['action_logits'],
                                                           single_action_logits, targets_action[:,0])
-                mutual_distillation_loss = mutual_distillation_offence_loss + mutual_distillation_action_loss
+                mutual_distillation_loss += mutual_distillation_offence_loss + mutual_distillation_action_loss
 
             loss = view_loss + mutual_distillation_loss
             if train:
@@ -268,9 +261,9 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
         json.dump(multi_view_data, f, indent=4)
     print(loss_total_action, loss_total_offence_severity,loss_total_mutual_distillation , loss_total_action / total_loss,
             loss_total_offence_severity / total_loss,
-            loss_total_mutual_distillation )
+            loss_total_mutual_distillation /total_loss )
     return ((os.path.join(model_name,single_prediction_file),os.path.join(model_name, multi_view_prediction_file)),
             loss_total_action / total_loss,
             loss_total_offence_severity / total_loss,
-            loss_total_mutual_distillation
+            loss_total_mutual_distillation/ total_loss,
             )

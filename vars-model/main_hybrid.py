@@ -3,12 +3,12 @@ import logging
 import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import torch
-from dataset_readers.hybrid_dataset import MultiViewDatasetHybrid
+from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
 from torch.utils.data import DataLoader
-from train_hybrid import trainer
+from src.custom_trainers.train_hybrid import trainer
 import torch.nn as nn
 import torchvision.transforms as transforms
-from hybrid_model.hybrid_mvit_v2 import MultiVideoHybridMVit2
+from src.custom_model.hybrid_mvit_v2 import MultiVideoHybridMVit2
 from torchvision.models.video import MViT_V2_S_Weights
 
 
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     parser.add_argument("--pooling_type", required=False, type=str, default="max",
                         help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
-                        help="If the loss should be weighted")
+                        help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")

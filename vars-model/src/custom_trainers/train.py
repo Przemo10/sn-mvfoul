@@ -1,12 +1,11 @@
 import logging
 import os
-import time
 import torch
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
 from tqdm import tqdm
-from soccernet_evaluate import  evaluate
+from src.soccernet_evaluate import  evaluate
 
 def trainer(train_loader,
             val_loader2,
@@ -197,7 +196,7 @@ def train(dataloader,
             if len(outputs_action.size()) == 1:
                 outputs_action = outputs_action.unsqueeze(0)  
    
-            #compute the loss
+            #compute the custom_loss
             loss_offence_severity = criterion[0](outputs_offence_severity, targets_offence_severity)
             loss_action = criterion[1](outputs_action, targets_action)
 

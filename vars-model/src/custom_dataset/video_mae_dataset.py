@@ -1,14 +1,10 @@
 from torch.utils.data import Dataset
 from random import random
 import torch
-import os
 import random
-from data_loader import label2vectormerge, clips2vectormerge
-from torchvision.io.video import read_video
-from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights
+from src.custom_dataset.data_loader import label2vectormerge, clips2vectormerge,  get_ordered_random_indices
 import numpy as np
 import cv2
-from data_loader import get_ordered_random_indices
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers.feature_extraction_utils")
 warnings.filterwarnings("ignore", message=".*list of numpy.ndarrays is extremely slow.*")
@@ -154,5 +150,5 @@ class MultiViewMAEDataset(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return self.length
+        return 10 #self.length
 
