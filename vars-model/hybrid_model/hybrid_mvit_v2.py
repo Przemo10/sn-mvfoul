@@ -31,10 +31,10 @@ class MultiVideoHybridMVit2(nn.Module):
         nn.init.xavier_uniform_(self.img_embed_matrix)
 
         # Reuse the model head layer for classification tasks
-        self.tmp_head = self.model.head[1]
+        #self.tmp_head = self.model.head[1]
 
-        self.offence_head = self.tmp_head
-        self.action_head = self.tmp_head
+        #self.offence_head = self.tmp_head
+        #self.action_head = self.tmp_head
 
         # Initialize the classification head
         # self.fc_offence = nn.Linear(self.feet_dim, out_features=4)
@@ -49,10 +49,18 @@ class MultiVideoHybridMVit2(nn.Module):
             nn.Dropout(p=0.1),
             nn.Linear(768, 8)
         )
+        self.weights_init(self.fc_action)
+        self.weights_init(self.fc_offence)
 
     def freeze_blocks(self, freeze: bool):
         for param in self.model.blocks.parameters():
             param.requires_grad = freeze
+
+    def weights_init(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias:
+                torch.nn.init.zeros_(m.bias)
 
     def format_multi_frame_tokens(self, x, batch_size, tokens_per_frame):
         """
@@ -170,7 +178,7 @@ class MultiVideoHybridMVit2(nn.Module):
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
             # print(f"Shape {view_type} tokens after normalization: {tokens.shape}")
 
-            selected_tokens = torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
+            selected_tokens = tokens[:,0]  #tokens[:,0] #torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
 
             offence_logits = self.fc_offence(selected_tokens)
             action_logits = self.fc_action(selected_tokens)

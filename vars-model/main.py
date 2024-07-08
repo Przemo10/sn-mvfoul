@@ -1,20 +1,17 @@
 import os
 import logging
 import time
-import numpy as np
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from dataset import MultiViewDataset
+from dataset_readers.dataset import MultiViewDataset
 from train import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
 from model import MVNetwork
-from config.classes import EVENT_DICTIONARY, INVERSE_EVENT_DICTIONARY
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
-from torchvision.models.video import MViT_V2_S_Weights, MViT_V1_B_Weights
-from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights, mvit_v1_b, MViT_V1_B_Weights
+from torchvision.models.video import MViT_V2_S_Weights
 
 
 def checkArguments():
@@ -191,7 +188,7 @@ def main(*args):
 
         # Create the dataloaders for train validation and test datasets
         train_loader = torch.utils.data.DataLoader(dataset_Train,
-            batch_size=batch_size, shuffle=True,
+            batch_size=batch_size, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
 
         val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,
@@ -306,9 +303,9 @@ if __name__ == '__main__':
     parser.add_argument('--loglevel',   required=False, type=str,   default='INFO', help='logging level')
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
-    parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
+    parser.add_argument("--data_aug", required=False, type=str, default="No", help="Data augmentation")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
-    parser.add_argument("--pooling_type", required=False, type=str, default="max", help="Which type of pooling should be done")
+    parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")

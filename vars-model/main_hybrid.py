@@ -3,13 +3,13 @@ import logging
 import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import torch
-from dataset import MultiViewDataset
+from dataset_readers.hybrid_dataset import MultiViewDatasetHybrid
 from torch.utils.data import DataLoader
 from train_hybrid import trainer
 import torch.nn as nn
 import torchvision.transforms as transforms
-from hybrid_model.hybrid_mvit2 import MultiVideoHybridMVit2
-from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights
+from hybrid_model.hybrid_mvit_v2 import MultiVideoHybridMVit2
+from torchvision.models.video import MViT_V2_S_Weights
 
 
 
@@ -67,7 +67,7 @@ def main(*args):
         end_frame = args.end_frame
         weight_decay = args.weight_decay
 
-        model_name = "mvit_v2_s"
+        model_name = args.model_name
         pre_model = args.pre_model
         num_views = args.num_views
         fps = args.fps
@@ -125,17 +125,15 @@ def main(*args):
     # Initialize the data augmentation
     if data_aug == 'Yes':
         transformAug = transforms.Compose([
-            transforms.RandomAffine(degrees=(0, 0), translate=(0.1, 0.1), scale=(0.9, 1)),
-            transforms.RandomPerspective(distortion_scale=0.3, p=0.5),
+            transforms.GaussianBlur(kernel_size=(5, 9), sigma=(0.1, 5.)),
             transforms.RandomRotation(degrees=5),
-            transforms.ColorJitter(brightness=0.5, saturation=0.5, contrast=0.5),
             transforms.RandomHorizontalFlip()
         ])
     else:
         transformAug = None
 
     transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
-    dataset_Train = MultiViewDataset(path=path,
+    dataset_Train = MultiViewDatasetHybrid(path=path,
                                      start=start_frame,
                                      end=end_frame,
                                      fps=fps,
@@ -144,11 +142,11 @@ def main(*args):
                                      transform=transformAug,
                                      transform_model=transforms_model)
 
-    dataset_Valid2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
+    dataset_Valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
                                       num_views=num_views,
                                       transform_model=transforms_model)
 
-    dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test',
+    dataset_Test2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='test',
                                      num_views=num_views,
                                      transform_model=transforms_model)
 
@@ -159,16 +157,16 @@ def main(*args):
     print('Dataloaders initalization ...')
 
     # Create the dataloaders for train validation and test datasets
-    train_loader = DataLoader(dataset_Train, batch_size=batch_size, shuffle=False,
+    train_loader = DataLoader(dataset_Train, batch_size=batch_size, shuffle=True,
                               num_workers=max_num_worker, pin_memory=True)
 
     val_loader2 = DataLoader(dataset_Valid2,
-                             batch_size=1, shuffle=False,
+                             batch_size=batch_size, shuffle=False,
                              num_workers=max_num_worker, pin_memory=True)
 
     test_loader2 = DataLoader(dataset_Test2,
                               batch_size=batch_size, shuffle=False,
-                              num_workers=max_num_worker, pin_memory=False)
+                              num_workers=max_num_worker,  pin_memory=False)
 
     print('Dataloaders initalization - finished')
 
@@ -188,12 +186,7 @@ def main(*args):
                                       betas=(0.9, 0.999), eps=1e-07,
                                       weight_decay=weight_decay, amsgrad=False)
 
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer=optimizer, max_lr=args.lr,
-                                                        epochs=args.num_epochs,
-                                                        div_factor=10,
-                                                        steps_per_epoch=len(dataset_Train) // args.batch_size,
-                                                        final_div_factor=1000,
-                                                        pct_start=5 / args.num_epochs, anneal_strategy='cos')
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
         epoch_start = 0
 
@@ -224,8 +217,8 @@ if __name__ == '__main__':
 
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--path', required=True, type=str, help='Path to the dataset folder')
-    parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
-    parser.add_argument('--model_name', required=False, type=str, default="VARS_HYBRID", help='named of the model to save')
+    parser.add_argument('--max_epochs', required=False, type=int, default=100, help='Maximum number of epochs')
+    parser.add_argument('--model_name', required=False, type=str, default="VARS_HYBRID_MVIT_DEBUG", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
     parser.add_argument('--LR', required=False, type=float, default=1e-02, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
@@ -234,16 +227,16 @@ if __name__ == '__main__':
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=2, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
-    parser.add_argument("--pre_model", required=False, type=str, default="r2plus1d_18",
+    parser.add_argument("--pre_model", required=False, type=str, default="hybrid_vit_v2_s",
                         help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="max",
                         help="Which type of pooling should be done")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="No",
+    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
                         help="If the loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
-    parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
+    parser.add_argument("--step_size", required=False, type=int, default=10, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
 

@@ -1,11 +1,9 @@
 import os
 import logging
 import time
-import numpy as np
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from dataset import MultiViewDataset
 from train import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
@@ -126,8 +124,6 @@ def main(*args):
     # Initialize the data augmentation
     if data_aug == 'Yes':
         transformAug = transforms.Compose([
-                                          transforms.RandomAffine(degrees=(0, 0), translate=(0.1, 0.1), scale=(0.9, 1)),
-                                          transforms.RandomPerspective(distortion_scale=0.3, p=0.5),
                                           transforms.RandomRotation(degrees=5),
                                           transforms.ColorJitter(brightness=0.5, saturation=0.5, contrast=0.5),
                                           transforms.RandomHorizontalFlip()
@@ -217,9 +213,9 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--path', required=True, type=str, help='Path to the dataset folder')
     parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
-    parser.add_argument('--model_name', required=False, type=str, default="VIDEO_MAE", help='named of the model to save')
+    parser.add_argument('--model_name', required=False, type=str, default="VIDEO_MAE2", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
-    parser.add_argument('--LR', required=False, type=float, default=1e-04, help='Learning Rate')
+    parser.add_argument('--LR', required=False, type=float, default=5e-04, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
     parser.add_argument('--max_num_worker', required=False, type=int, default=1, help='number of worker to load data')
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
@@ -228,16 +224,16 @@ if __name__ == '__main__':
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
     parser.add_argument("--pre_model", required=False, type=str, default="video_mae",
                         help="Name of the pretrained model")
-    parser.add_argument("--pooling_type", required=False, type=str, default="max",
+    parser.add_argument("--pooling_type", required=False, type=str, default="mean",
                         help="Which type of pooling should be done")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
+    parser.add_argument("--weighted_loss", required=False, type=str, default="No",
                         help="If the loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
+    parser.add_argument("--weight_decay", required=False, type=float, default=0.05, help="Weight decacy")
 
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

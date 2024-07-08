@@ -1,28 +1,19 @@
 from torch.utils.data import Dataset
 from random import random
 import torch
-import os
 import random
-from data_loader import label2vectormerge, clips2vectormerge
+from dataset_readers.data_loader import label2vectormerge, clips2vectormerge
 from torchvision.io.video import read_video
-from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights
-import numpy as np
-import cv2
-from data_loader import get_ordered_random_indices
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="transformers.feature_extraction_utils")
-warnings.filterwarnings("ignore", message=".*list of numpy.ndarrays is extremely slow.*")
-from transformers import AutoImageProcessor
 
-class MultiViewMAEDataset(Dataset):
-    def __init__(self, path, start, end, fps, split, num_views, transform=None):
+
+class MultiViewDatasetHybrid(Dataset):
+    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None):
 
         if split != 'chall':
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity, self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(
                 path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
-            self.clips = self.clips
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity,
                                                            len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
@@ -53,13 +44,10 @@ class MultiViewMAEDataset(Dataset):
         self.start = start
         self.end = end
         self.transform = transform
-        self.crop_margin = True
-        self.transform_model =  AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        self.transform_model = transform_model
         self.num_views = num_views
-        self.model_frames = 16
-        self.fps = fps
 
-        self.factor = (end - start) / (((end - start) / 25) * self.model_frames)
+        self.factor = (end - start) / (((end - start) / 25) * fps)
 
         self.length = len(self.clips)
         print(self.length)
@@ -92,7 +80,7 @@ class MultiViewMAEDataset(Dataset):
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
             cont = True
-            if self.split == 'train':
+            if self.split != 'chal2':
                 while cont:
                     aux = random.randint(0, len(self.clips[index]) - 1)
                     if aux not in prev_views:
@@ -100,52 +88,36 @@ class MultiViewMAEDataset(Dataset):
                 index_view = aux
                 prev_views.append(index_view)
 
-            cap = cv2.VideoCapture(self.clips[index][index_view])
-            frames = []
+            video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
+            frames = video[self.start:self.end, 25:, 25:, :]
 
-            # Read until video is completed
-            while cap.isOpened():
-                # Capture frame-by-frame
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                # Append each frame to the list
-                frames.append(frame)
+            final_frames = None
 
-            # Convert the list of frames into a numpy array
-            video_np = np.array(frames, dtype=np.uint8)
+            for j in range(len(frames)):
+                if j % self.factor < 1:
+                    if final_frames == None:
+                        final_frames = frames[j, :, :, :].unsqueeze(0)
+                    else:
+                        final_frames = torch.cat((final_frames, frames[j, :, :, :].unsqueeze(0)), 0)
 
-            # Release the VideoCapture object
-            cap.release()
+            final_frames = final_frames.permute(0, 3, 1, 2)
 
-
-            if self.fps != 16:
-                indices = get_ordered_random_indices(self.fps)
-                final_frames = video_np[indices, :, :, :]
-            else:
-                final_frames = video_np[self.start:self.end, :, :, :]
-            if self.crop_margin:
-                final_frames = final_frames[:,25:, 25:, :]
-
-            final_frames = torch.tensor(final_frames).permute(0,3,1,2)
-
-            if self.transform:
+            if self.transform != None:
                 final_frames = self.transform(final_frames)
 
-            final_frames = torch.stack([
-                self.transform_model(frame, return_tensors='pt').pixel_values.squeeze(1)
-                for frame in final_frames
-            ]).permute(1,0,2,3,4)
-
-            # final_frames = self.transform_model(list(final_frames),return_tensors='pt').pixel_values
+            final_frames = self.transform_model(final_frames)
+            final_frames = final_frames.permute(1, 0, 2, 3)
 
             if num_view == 0:
-                videos = final_frames
-
+                videos = final_frames.unsqueeze(0)
+            else:
+                final_frames = final_frames.unsqueeze(0)
                 videos = torch.cat((videos, final_frames), 0)
 
         if self.num_views != 1 and self.num_views != 5:
             videos = videos.squeeze()
+
+        videos = videos.permute(0, 2, 1, 3, 4)
 
         if self.split != 'chall':
             return self.labels_offence_severity[index][0], self.labels_action[index][0], videos, self.number_of_actions[
@@ -154,5 +126,5 @@ class MultiViewMAEDataset(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return self.length
+        return  self.length
 
