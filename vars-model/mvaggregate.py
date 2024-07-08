@@ -119,7 +119,7 @@ class MVAggregate(nn.Module):
 
     def forward(self, mvimages):
 
-        pooled_view, attention = self.aggregation_model(mvimages)
+        pooled_view, attention = self.aggregation_model(mvimages) # dla mvit (4,400),  (4,2,400)
 
         inter = self.inter(pooled_view)
         pred_action = self.fc_action(inter)

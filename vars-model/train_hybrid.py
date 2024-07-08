@@ -81,8 +81,8 @@ def trainer(train_loader,
         )
         valid_loss = loss_mutual_distillation + loss_offence_severity + loss_action
 
-        results_single = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file[0])
-        results_multi = evaluate(os.path.join(path_dataset, "train", "annotations.json"),prediction_file[1])
+        results_single = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file[0])
+        results_multi = evaluate(os.path.join(path_dataset, "valid", "annotations.json"),prediction_file[1])
 
         print(f"VALID: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ,"
               f"loss_distil: {round(loss_mutual_distillation,10)}")
@@ -90,7 +90,7 @@ def trainer(train_loader,
               f" Multi : {results_multi}")
 
 
-        if epoch % 15 == 0:
+        if epoch % 5 == 0:
             prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
                 test_loader2,
                 model,
