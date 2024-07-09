@@ -41,3 +41,16 @@ Command for extracting zip files `dataset224p` (low resolution) or `dataset720p`
 7z x mvfouls/train.zip -o./dataset224p/train/
 7z x mvfouls/chalenge.zip 7z x -o./dataset224p/chalenge/
 ```
+
+Command for extracting `dataset720p`
+```bash
+7z x mvfouls/test720p.zip -o./dataset720p/test/
+7z x mvfouls/valid720p.zip -o./dataset720p/valid/
+7z x mvfouls/train720p.zip -o./dataset720p/train/
+7z x mvfouls/chalenge720p.zip 7z x -o./dataset720p/chalenge/
+```
+
+After we should get `fix mv-foul-720p-fix.zip` file and put them into this directory
+
+
+Next run `python move_fixed_720p_data.py` for replacement wrong 720p files. 
