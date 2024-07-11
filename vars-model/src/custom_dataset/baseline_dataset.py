@@ -84,7 +84,7 @@ class MultiViewDataset(Dataset):
                         cont = False
                 index_view = aux
                 prev_views.append(index_view)
-
+            # print(self.clips[index], print(self.clips[index][index_view]))
             video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
             frames = video[self.start:self.end,:,:,:]
 

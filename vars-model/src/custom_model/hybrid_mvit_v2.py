@@ -42,11 +42,10 @@ class MultiVideoHybridMVit2(nn.Module):
 
         self.fc_offence = nn.Sequential(
             nn.Identity(),
-            nn.Dropout(p=0.1),
             nn.Linear(768, 4)
         )
         self.fc_action = nn.Sequential(
-            nn.Dropout(p=0.1),
+            nn.Identity(),
             nn.Linear(768, 8)
         )
         self.weights_init(self.fc_action)
@@ -178,7 +177,7 @@ class MultiVideoHybridMVit2(nn.Module):
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
             # print(f"Shape {view_type} tokens after normalization: {tokens.shape}")
 
-            selected_tokens = tokens[:,0]  #tokens[:,0] #torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
+            selected_tokens = torch.max(tokens, dim=1)[0] #tokens[:,0] #torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
 
             offence_logits = self.fc_offence(selected_tokens)
             action_logits = self.fc_action(selected_tokens)

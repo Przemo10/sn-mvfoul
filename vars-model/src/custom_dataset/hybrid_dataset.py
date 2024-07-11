@@ -88,6 +88,8 @@ class MultiViewDatasetHybrid(Dataset):
                 index_view = aux
                 prev_views.append(index_view)
 
+            # print(self.clips[index][index_view])
+
             video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
             frames = video[self.start:self.end, 25:, 25:, :]
 
@@ -126,5 +128,5 @@ class MultiViewDatasetHybrid(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return 10 # self.length
+        return   self.length
 
