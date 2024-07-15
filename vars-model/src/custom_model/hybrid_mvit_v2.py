@@ -24,7 +24,12 @@ class MultiVideoHybridMVit2(nn.Module):
         self.model = mvit_v2_s(weights=weights)
         self.embed_dim = 96
         self.feet_dim = 400
-        self.org_dim = self.model.head[1].in_features
+        self.token_dim = 768
+        self.intern = nn.Sequential(
+            nn.Linear(self.token_dim, self.feet_dim),
+            nn.ReLU(),
+
+        )
 
         # Initialize the learnable image embedding matrix
         self.img_embed_matrix = nn.Parameter(torch.zeros(1, self.n, self.embed_dim), requires_grad=True)
@@ -41,12 +46,10 @@ class MultiVideoHybridMVit2(nn.Module):
         # self.fc_action = nn.Linear(self.feet_dim, out_features=8)
 
         self.fc_offence = nn.Sequential(
-            nn.Identity(),
-            nn.Linear(768, 4)
+            nn.Linear(self.feet_dim, 4)
         )
         self.fc_action = nn.Sequential(
-            nn.Identity(),
-            nn.Linear(768, 8)
+            nn.Linear(self.feet_dim, 8)
         )
         self.weights_init(self.fc_action)
         self.weights_init(self.fc_offence)
@@ -177,7 +180,9 @@ class MultiVideoHybridMVit2(nn.Module):
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
             # print(f"Shape {view_type} tokens after normalization: {tokens.shape}")
 
-            selected_tokens = torch.max(tokens, dim=1)[0] #tokens[:,0] #torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
+            selected_tokens = tokens[:,0] #torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
+
+            selected_tokens = self.intern(selected_tokens)
 
             offence_logits = self.fc_offence(selected_tokens)
             action_logits = self.fc_action(selected_tokens)
@@ -194,7 +199,7 @@ class MultiVideoHybridMVit2(nn.Module):
 
 # Usage example:
 # Initialize the model
-# model = MultiVideoHybridMVit2(num_views=2)
+model = MultiVideoHybridMVit2(num_views=2)
 # Example input: [batch_size, num_views, channels, depth, height, width]
 #videos = torch.randn(4, 2, 3, 16, 224, 224)
 """

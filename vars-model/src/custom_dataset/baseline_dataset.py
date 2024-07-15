@@ -85,7 +85,9 @@ class MultiViewDataset(Dataset):
                 index_view = aux
                 prev_views.append(index_view)
             # print(self.clips[index], print(self.clips[index][index_view]))
-            video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
+            video, _, _ = read_video(self.clips[index][index_view],
+                                     output_format="THWC", pts_unit='sec')
+            # print(video.shape)
             frames = video[self.start:self.end,:,:,:]
 
             final_frames = None
@@ -103,6 +105,7 @@ class MultiViewDataset(Dataset):
                 final_frames = self.transform(final_frames)
 
             final_frames = self.transform_model(final_frames)
+            # print(final_frames.shape)
             final_frames = final_frames.permute(1, 0, 2, 3)
             
             if num_view == 0:

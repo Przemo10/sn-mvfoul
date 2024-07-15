@@ -26,7 +26,7 @@ def save_checkpoint(epoch, model, optimizer, scheduler, path, filename, losses, 
 def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion, best_model_path,
             epoch_start, model_name, path_dataset, max_epochs=1000):
     logging.info("start training")
-    md_loss = MutualDistillationLoss(temp=4.0, lambda_hyperparam=0.1)
+    md_loss = MutualDistillationLoss(temp=1.0, lambda_hyperparam=10)
     best_val_loss = float('inf')
     best_train_loss = float('inf')
 
@@ -95,7 +95,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             f"loss_distil: {round(loss_mutual_distillation, 10)}")
         print(f" Single: {results_single},\n Multi : {results_multi}")
 
-        if epoch % 5 == 0:
+        if epoch % 2 == 0:
             prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
                 test_loader2,
                 model,
@@ -195,8 +195,8 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                     outputs_offence_severity = einops.rearrange(outputs_offence_severity, ' (b n) k -> b n k',
                                                                 b=batch_size, n=total_views)
                     outputs_action = einops.rearrange(outputs_action, ' (b n) k -> b n k', b=batch_size, n=total_views)
-                    outputs_offence_severity = torch.max(outputs_offence_severity,dim=1)[0]#outputs_offence_severity[:,0]
-                    outputs_action =   torch.max(outputs_action,dim=1)[0] #outputs_action[:,0]
+                    outputs_offence_severity = outputs_offence_severity[:,0]
+                    outputs_action =  outputs_action[:,0]
 
                 for i in range(len(action)):
                     values = {
@@ -219,9 +219,9 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                     outputs_action = outputs_action.unsqueeze(0)
                 # compute the custom_loss
                 if view_type == 'single':
-                    view_loss_offence_severity += criterion[0](outputs_offence_severity, targets_offence_severity)
+                    view_loss_offence_severity += 0.3 * criterion[0](outputs_offence_severity, targets_offence_severity)
                     # print(outputs_action, targets_action)
-                    view_loss_action += criterion[1](outputs_action, targets_action)
+                    view_loss_action += 0.3 * criterion[1](outputs_action, targets_action)
                     # print(view_loss_action)
                     view_loss = view_loss + view_loss_action + view_loss_offence_severity
 
@@ -237,13 +237,12 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                                                         b=batch_size, n=total_views)
                 mutual_distillation_offence_loss = md_loss(
                     output['mv_collection']['offence_logits'],
-                    single_offence_logits,
-                    torch.max(targets_offence_severity,dim=1)[0]
+                    single_offence_logits,targets_offence_severity[:,0]
                 )
                 mutual_distillation_action_loss = md_loss(
                     output['mv_collection']['action_logits'],
                     single_action_logits,
-                    torch.max(targets_action,dim=1)[0]
+                    targets_action[:,0]
                 )
                 mutual_distillation_loss += mutual_distillation_offence_loss  + mutual_distillation_action_loss
 
@@ -251,7 +250,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             if train:
                 optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 100)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
                 optimizer.step()
                 scheduler.step()
 

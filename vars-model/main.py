@@ -12,6 +12,7 @@ from src.custom_model.baseline_model import MVNetwork
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
+from torchvision.models.video import swin3d_s,  Swin3D_S_Weights
 
 
 def checkArguments():
@@ -135,6 +136,9 @@ def main(*args):
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
     elif pre_model == "mvit_v2_s":
         transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
+    elif pre_model == "swin3d_s":
+        transforms_model = Swin3D_S_Weights.KINETICS400_V1.transforms()
+        print("swin3d_s")
     else:
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         print("Warning: Could not find the desired pretrained model")
