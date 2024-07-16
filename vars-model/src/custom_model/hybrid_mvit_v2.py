@@ -27,6 +27,7 @@ class MultiVideoHybridMVit2(nn.Module):
         self.token_dim = 768
         self.intern = nn.Sequential(
             nn.Linear(self.token_dim, self.feet_dim),
+            nn.BatchNorm1d(self.feet_dim),
             nn.ReLU(),
 
         )
@@ -168,7 +169,7 @@ class MultiVideoHybridMVit2(nn.Module):
                 # print(f"Updated thw_shape for mv_collection: {thw_shape}")
                 self.freeze_blocks(freeze=False)
             else:
-                self.freeze_blocks(freeze=False)
+                self.freeze_blocks(freeze=True)
 
             # Sequentially pass the tokens through each block with the thw argument
             for block in self.model.blocks:

@@ -133,7 +133,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                             all_results)
             best_train_loss = train_loss
             print('Best train model saved.')
-        if epoch == max_epochs - 1:
+        if epoch >= max_epochs - 3:
             save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, "last_model.pth.tar", all_losses,
                             all_results)
             print('Last model saved.')
@@ -219,9 +219,9 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                     outputs_action = outputs_action.unsqueeze(0)
                 # compute the custom_loss
                 if view_type == 'single':
-                    view_loss_offence_severity += 0.3 * criterion[0](outputs_offence_severity, targets_offence_severity)
+                    view_loss_offence_severity += 0.5 * criterion[0](outputs_offence_severity, targets_offence_severity)
                     # print(outputs_action, targets_action)
-                    view_loss_action += 0.3 * criterion[1](outputs_action, targets_action)
+                    view_loss_action += 0.5 * criterion[1](outputs_action, targets_action)
                     # print(view_loss_action)
                     view_loss = view_loss + view_loss_action + view_loss_offence_severity
 

@@ -30,7 +30,7 @@ def checkArguments():
         exit()
 
     # args.pooling_type
-    if args.pooling_type != 'max' and args.pooling_type != 'mean' and args.pooling_type != 'attention':
+    if args.pooling_type not in ['max', 'mean', 'attention', 'max_mean_alpha', 'max_mean_weight']:
         print("Could not find your desired argument for --args.pooling_type:")
         print("Possible arguments are: max or mean")
         exit()
