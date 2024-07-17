@@ -213,7 +213,18 @@ def train(dataloader,
             loss_total_offence_severity += float(loss_offence_severity)
             total_loss += 1
             if writer is not None:
-                writer.add_scalar("Loss/train", loss_total_action, epoch)
+                if set_name == "train":
+                    writer.add_scalar("Loss/train - action", loss_total_action, epoch)
+                    writer.add_scalar("Loss/train - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar("Loss/train", loss_total_offence_severity + loss_total_action, epoch)
+                if set_name == "valid":
+                    writer.add_scalar("Loss/valid - action", loss_total_action, epoch)
+                    writer.add_scalar("Loss/valid - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar("Loss/valid", loss_total_offence_severity + loss_total_action, epoch)
+                if set_name == "test":
+                    writer.add_scalar("Loss/test - action", loss_total_action, epoch)
+                    writer.add_scalar("Loss/test - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar("Loss/test", loss_total_offence_severity + loss_total_action, epoch)
           
         gc.collect()
         torch.cuda.empty_cache()

@@ -27,6 +27,9 @@ def label2vectormerge(folder_path, split, num_views):
 		exit()
 
 	not_taking = []
+	not_taking = []
+	if split == 'train':
+		not_taking = ['1520', '1409', '213', '591', '1134', '1465', '130', '508', '818', '1106', '1574', '773', '565']
 
 	num_classes_action = 8
 	num_classes_offence_severity = 4
