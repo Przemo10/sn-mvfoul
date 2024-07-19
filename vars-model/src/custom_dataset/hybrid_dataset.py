@@ -135,5 +135,5 @@ class MultiViewDatasetHybrid(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return   self.length
+        return self.length
 

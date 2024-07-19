@@ -54,7 +54,7 @@ class XinMultimodalNet(torch.nn.Module):
         for i in range(V):
             aux = self.lifting_net(self.model(mvimages[:, i]))
             x = self.drop_layer(aux)
-            print(x.shape)
+            # print(x.shape)
             single_offence = self.fc_offence(x)
             single_action = self.fc_action(x)
             output_dict[f"single_{i}"] = {}
@@ -70,11 +70,11 @@ class XinMultimodalNet(torch.nn.Module):
         mv_actions = self.fc_mv_actions(x)
         output_dict["mv_collection"]["offence_logits"] = mv_offence
         output_dict["mv_collection"]["action_logits"] = mv_actions
-        print(x.shape)
+        # print(x.shape)
 
         return output_dict
 
-
+"""
 model = XinMultimodalNet(num_views=2)
 
 for  x,y in model.named_parameters():
@@ -89,3 +89,4 @@ for i in range(model.num_views):
     print(f"single_{i}")
 
 print(torch.argmax(output['single_1']['action_logits'], dim=1))
+"""

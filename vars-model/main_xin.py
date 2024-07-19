@@ -61,8 +61,8 @@ def main(*args):
     if args:
         args = args[0]
         LR = args.LR
-        gamma = args.gamma
-        step_size = args.step_size
+        gamma = args.factor
+        patience = args.patience
         start_frame = args.start_frame
         end_frame = args.end_frame
         weight_decay = args.weight_decay
@@ -99,7 +99,7 @@ def main(*args):
                                                                                                                   batch_size) + "_F" + str(
                                                                                                                   number_of_frames) + "_S" + "_G" + str(
                                                                                                                   gamma) + "_Step" + str(
-                                                                                                                  step_size)))))),
+                                                                                                                  patience)))))),
                 exist_ok=True)
 
     best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views),
@@ -109,7 +109,7 @@ def main(*args):
                                                                                                                  batch_size) + "_F" + str(
                                                                                                                  number_of_frames) + "_S" + "_G" + str(
                                                                                                                  gamma) + "_Step" + str(
-                                                                                                                 step_size))))))
+                                                                                                                 patience))))))
 
     log_path = os.path.join(best_model_path, "logging.log")
 
@@ -186,12 +186,8 @@ def main(*args):
                                       betas=(0.9, 0.95), eps=1e-04,
                                       weight_decay=weight_decay, amsgrad=False)
 
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer=optimizer, max_lr=args.LR,
-                                                        epochs=args.max_epochs,
-                                                        div_factor=10,
-                                                        steps_per_epoch=len(dataset_Train) // args.batch_size,
-                                                        final_div_factor=1000,
-                                                        pct_start=0.45, anneal_strategy='cos')
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=gamma,
+                                                               patience=patience)
 
         epoch_start = 0
 
@@ -223,7 +219,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--path', required=True, type=str, help='Path to the dataset folder')
     parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
-    parser.add_argument('--model_name', required=False, type=str, default="Hybrid_mvit_num4", help='named of the model to save')
+    parser.add_argument('--model_name', required=False, type=str, default="Xin0", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
     parser.add_argument('--LR', required=False, type=float, default=1e-04, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
@@ -241,8 +237,8 @@ if __name__ == '__main__':
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
-    parser.add_argument("--step_size", required=False, type=int, default=10, help="StepLR parameter")
-    parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
+    parser.add_argument("--patience", required=False, type=int, default=10, help="Patience parameter")
+    parser.add_argument("--factor", required=False, type=float, default=0.5, help="Factor parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
 
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,

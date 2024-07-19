@@ -109,7 +109,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             f"Test loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}")
         print(f" Multi : {results_multi}")
 
-        # scheduler.step()
+        scheduler.step(valid_loss)
 
         if valid_loss < best_val_loss and epoch > 3:
             save_checkpoint(
@@ -117,7 +117,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                 all_losses, all_results)
             best_val_loss = valid_loss
             print('Best valid model saved.')
-        elif epoch % 5 == 0:
+        elif (epoch % 10 == 0) and epoch > 5:
             save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, f"epoch{epoch + 1}_model.pth.tar",
                             all_losses,
                             all_results)
@@ -127,7 +127,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                 epoch, model, optimizer, scheduler, best_model_path, "best_train_model.pth.tar",
                 all_losses, all_results)
             best_train_loss = train_loss
-            print('Best train model saved.')
+            print(f'Best train model saved: {scheduler.get_last_lr()}')
         if test_loss < best_test_loss and epoch > 5:
             save_checkpoint(
                 epoch, model, optimizer, scheduler, best_model_path, f"best_test_epoch{epoch+1}_model.pth.tar",
@@ -194,7 +194,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
 
                 # compute total_single_view_loss
                 single_view_loss_offence_severity += criterion[0](single_view_offence_output, targets_offence_severity)
-                single_view_loss_action += criterion[0](single_view_action_output, targets_action)
+                single_view_loss_action += criterion[1](single_view_action_output, targets_action)
 
             if 'mv_collection' in list(output.keys()):
                 multi_view_offence_output = output['mv_collection']['offence_logits']
@@ -218,7 +218,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
 
                 # multi-view-loss
                 multi_view_loss_offence_severity = criterion[0](multi_view_offence_output, targets_offence_severity)
-                multi_view_view_loss_action = criterion[0](multi_view_action_output, targets_action)
+                multi_view_view_loss_action = criterion[1](multi_view_action_output, targets_action)
                 multi_view_loss = multi_view_loss_offence_severity + multi_view_view_loss_action
 
             loss = single_view_loss_offence_severity + single_view_loss_offence_severity + multi_view_loss
@@ -228,7 +228,6 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
                 optimizer.step()
-                scheduler.step()
 
             loss_total_action += float(multi_view_view_loss_action + single_view_loss_action)
             loss_total_offence_severity += float(multi_view_loss_offence_severity + single_view_loss_offence_severity)
