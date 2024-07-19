@@ -7,7 +7,7 @@ from torchvision.io.video import read_video
 
 
 class MultiViewDatasetHybrid(Dataset):
-    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None):
+    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None, video_shift_aug=False):
 
         if split != 'chall':
             # To load the annotations
@@ -20,6 +20,7 @@ class MultiViewDatasetHybrid(Dataset):
 
             self.weights_offence_severity = torch.div(1, self.distribution_offence_severity)
             self.weights_action = torch.div(1, self.distribution_action)
+            self.video_shift_aug = video_shift_aug
         else:
             self.clips = clips2vectormerge(path, split, num_views, [])
 
@@ -91,7 +92,13 @@ class MultiViewDatasetHybrid(Dataset):
             # print(self.clips[index][index_view])
 
             video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
-            frames = video[self.start:self.end, 25:, 25:, :]
+            if self.split == 'train' and self.video_shift_aug:
+                rand_shift = random.randint(-5,5)
+                start = self.start + rand_shift
+                end = self.end + rand_shift
+                frames = video[start:end, :, :, :]
+            else:
+                frames = video[self.start:self.end, :, :, :]
 
             final_frames = None
 
