@@ -244,3 +244,39 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             loss_total_action / total_loss,
             loss_total_offence_severity / total_loss
             )
+
+
+def evaluation(dataloader,
+               model,
+               set_name="test",
+               ):
+    model.eval()
+
+    multi_view_prediction_file = f"multi_view_predictions_{set_name}.json"
+    multi_view_data = {"Set": set_name, "Actions": {}}
+
+    if True:
+        for _, _, mvclips, action in dataloader:
+
+            mvclips = mvclips.cuda().float()
+            # mvclips = mvclips.float()
+            output = model(mvclips)
+            multi_view_offence_output = output['mv_collection']['offence_logits']
+            multi_view_action_output = output['mv_collection']['action_logits']
+
+            for i in range(len(action)):
+                values = {
+                    "Action class": INVERSE_EVENT_DICTIONARY["action_class"][
+                        torch.argmax(multi_view_action_output.detach().cpu(), dim=1)[i].item()]
+                }
+                preds_sev = torch.argmax(multi_view_offence_output.detach().cpu(), dim=1)
+                offence, severity = OFFENCE_SEVERITY_MAP[preds_sev[i].item()]
+                values["Offence"] = offence
+                values["Severity"] = severity
+                multi_view_data["Actions"][action[i]] = values
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    with open(multi_view_prediction_file, "w") as outfile:
+        json.dump(multi_view_data, outfile)
+    return multi_view_prediction_file

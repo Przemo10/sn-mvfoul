@@ -226,6 +226,7 @@ def main(*args):
         epoch_start = 0
 
         if continue_training:
+            print(2048)
             path_model = os.path.join(log_path, 'model.pth.tar')
             load = torch.load(path_model)
             model.load_state_dict(load['state_dict'])
@@ -299,7 +300,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)    
     parser.add_argument('--path',   required=True, type=str, help='Path to the dataset folder' )
     parser.add_argument('--max_epochs',   required=False, type=int,   default=60,     help='Maximum number of epochs' )
-    parser.add_argument('--model_name',   required=False, type=str,   default="VARS",     help='named of the model to save' )
+    parser.add_argument('--model_name',   required=False, type=str,   default="VARS1",     help='named of the model to save' )
     parser.add_argument('--batch_size', required=False, type=int,   default=2,     help='Batch size' )
     parser.add_argument('--LR',       required=False, type=float,   default=1e-04, help='Learning Rate' )
     parser.add_argument('--GPU',        required=False, type=int,   default=-1,     help='ID of the GPU to use' )
@@ -315,7 +316,7 @@ if __name__ == '__main__':
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
-    parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
+    parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
 
     parser.add_argument("--only_evaluation", required=False, type=int, default=3, help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

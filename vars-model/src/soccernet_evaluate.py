@@ -74,7 +74,7 @@ def evaluate(ground_truth_file, predictions_file):
                 distribution_action_prediction[0, action_class_groundtruth] += 1
 
         else:
-             pass  #  print("You did not predict the action: ", actions)
+             pass #print("You did not predict the action: ", actions)
 
     accuracy_offence_severity = sum(distribution_offence_severity_prediction[0]) / sum(
         distribution_offence_severity_groundtruth[0])
