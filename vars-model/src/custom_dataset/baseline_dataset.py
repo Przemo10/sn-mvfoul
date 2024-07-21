@@ -7,7 +7,7 @@ from torchvision.io.video import read_video
 
 
 class MultiViewDataset(Dataset):
-    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None):
+    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None,video_shift_aug=0):
 
         if split != 'chall':
             # To load the annotations
@@ -48,6 +48,7 @@ class MultiViewDataset(Dataset):
         self.factor = (end - start) / (((end - start) / 25) * fps)
 
         self.length = len(self.clips)
+        self.video_shift_aug = video_shift_aug
         print(self.length)
 
     def getDistribution(self):
@@ -88,7 +89,13 @@ class MultiViewDataset(Dataset):
             video, _, _ = read_video(self.clips[index][index_view],
                                      output_format="THWC", pts_unit='sec')
             # print(video.shape)
-            frames = video[self.start:self.end,:,:,:]
+            if self.split == 'train' and self.video_shift_aug > 0:
+                rand_shift = random.randint(-self.video_shift_aug, self.video_shift_aug)
+                start = self.start + rand_shift
+                end = self.end + rand_shift
+                frames = video[start:end, :, :, :]
+            else:
+                frames = video[self.start:self.end, :, :, :]
 
             final_frames = None
 

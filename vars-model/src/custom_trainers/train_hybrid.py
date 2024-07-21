@@ -121,7 +121,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                 f"loss_distil: {round(loss_mutual_distillation, 10)}")
             print(f" Single: {results_single},\n Multi : {results_multi}")
 
-        # scheduler.step()
+        scheduler.step()
 
         if valid_loss < best_val_loss and epoch > 5:
             save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, "best_valid_model.pth.tar", all_losses,
@@ -252,7 +252,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
                 optimizer.step()
-                scheduler.step()
+                # scheduler.step()
 
             loss_total_action += float(view_loss_action)
             loss_total_offence_severity += float(view_loss_offence_severity)

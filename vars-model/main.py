@@ -70,7 +70,6 @@ def main(*args):
         start_frame = args.start_frame
         end_frame = args.end_frame
         weight_decay = args.weight_decay
-        
         model_name = args.model_name
         pre_model = args.pre_model
         num_views = args.num_views
@@ -78,6 +77,7 @@ def main(*args):
         number_of_frames = int((args.end_frame - args.start_frame) / ((args.end_frame - args.start_frame) / (((args.end_frame - args.start_frame) / 25) * args.fps)))
         batch_size = args.batch_size
         data_aug = args.data_aug
+        video_shift_aug = args.video_shift_aug
         path = args.path
         pooling_type = args.pooling_type
         weighted_loss = args.weighted_loss
@@ -95,11 +95,10 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    os.makedirs(os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
-                            "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size)))))), exist_ok=True)
 
     best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
                             "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size))))))
+    os.makedirs(best_model_path, exist_ok=True)
 
 
     log_path = os.path.join(best_model_path, "logging.log")
@@ -179,8 +178,9 @@ def main(*args):
 
         print('Dataset initialization- starts... ')
         # Create Train Validation and Test datasets
-        dataset_Train = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
-            num_views = num_views, transform=transformAug, transform_model=transforms_model)
+        dataset_Train = MultiViewDataset(
+            path=path, start=start_frame, end=end_frame, fps=fps, split='train', num_views = num_views,
+            transform=transformAug, transform_model=transforms_model,video_shift_aug=video_shift_aug)
         dataset_Valid2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid', num_views = 5,
             transform_model=transforms_model)
         dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5,
@@ -300,7 +300,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)    
     parser.add_argument('--path',   required=True, type=str, help='Path to the dataset folder' )
     parser.add_argument('--max_epochs',   required=False, type=int,   default=60,     help='Maximum number of epochs' )
-    parser.add_argument('--model_name',   required=False, type=str,   default="VARS1",     help='named of the model to save' )
+    parser.add_argument('--model_name',   required=False, type=str,   default="VARS_shift3",     help='named of the model to save' )
     parser.add_argument('--batch_size', required=False, type=int,   default=2,     help='Batch size' )
     parser.add_argument('--LR',       required=False, type=float,   default=1e-04, help='Learning Rate' )
     parser.add_argument('--GPU',        required=False, type=int,   default=-1,     help='ID of the GPU to use' )
@@ -309,6 +309,7 @@ if __name__ == '__main__':
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
+    parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the custom_loss should be weighted")

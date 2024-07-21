@@ -109,7 +109,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             f"Test loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}")
         print(f" Multi : {results_multi}")
 
-        scheduler.step(valid_loss)
+        scheduler.step()
 
         if valid_loss < best_val_loss and epoch > 3:
             save_checkpoint(

@@ -7,7 +7,7 @@ from torchvision.io.video import read_video
 
 
 class MultiViewDatasetHybrid(Dataset):
-    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None, video_shift_aug=False):
+    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None, video_shift_aug=0):
 
         if split != 'chall':
             # To load the annotations
@@ -90,10 +90,9 @@ class MultiViewDatasetHybrid(Dataset):
                 prev_views.append(index_view)
 
             # print(self.clips[index][index_view])
-
             video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
-            if self.split == 'train' and self.video_shift_aug:
-                rand_shift = random.randint(-5,5)
+            if self.split == 'train' and self.video_shift_aug > 0:
+                rand_shift = random.randint(-self.video_shift_aug, self.video_shift_aug)
                 start = self.start + rand_shift
                 end = self.end + rand_shift
                 frames = video[start:end, :, :, :]

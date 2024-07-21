@@ -67,12 +67,12 @@ def main(*args):
     if args:
         args = args[0]
         LR = args.LR
-        gamma = args.factor
-        patience = args.patience
+        gamma = args.gamma
+        step_size = args.step_size
         start_frame = args.start_frame
         end_frame = args.end_frame
         weight_decay = args.weight_decay
-
+        video_shift_aug = args.video_shift_aug
         model_name = args.model_name
         pre_model = args.pre_model
         num_views = args.num_views
@@ -82,7 +82,7 @@ def main(*args):
         batch_size = args.batch_size
         data_aug = args.data_aug
         path = args.path
-        pooling_type = args.pooling_type
+        pooling_type = "no-pooling"
         weighted_loss = args.weighted_loss
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
@@ -98,24 +98,9 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    os.makedirs(os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model,
-                                                                                                          os.path.join(
-                                                                                                              str(LR),
-                                                                                                              "_B" + str(
-                                                                                                                  batch_size) + "_F" + str(
-                                                                                                                  number_of_frames) + "_S" + "_G" + str(
-                                                                                                                  gamma) + "_Step" + str(
-                                                                                                                  patience)))))),
-                exist_ok=True)
-
-    best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views),
-                                                                                   os.path.join(pre_model,
-                                                                                                os.path.join(str(LR),
-                                                                                                             "_B" + str(
-                                                                                                                 batch_size) + "_F" + str(
-                                                                                                                 number_of_frames) + "_S" + "_G" + str(
-                                                                                                                 gamma) + "_Step" + str(
-                                                                                                                 patience))))))
+    best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
+                            "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size))))))
+    os.makedirs(best_model_path, exist_ok=True)
 
     log_path = os.path.join(best_model_path, "logging.log")
 
@@ -179,7 +164,7 @@ def main(*args):
             num_views=num_views,
             transform=transformAug,
             transform_model=transforms_model,
-            video_shift_aug=True)
+            video_shift_aug=video_shift_aug)
         dataset_valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
                                                 num_views=num_views,
                                                 transform_model=transforms_model)
@@ -220,8 +205,7 @@ def main(*args):
                                       betas=(0.9, 0.95), eps=1e-04,
                                       weight_decay=weight_decay, amsgrad=False)
 
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=gamma,
-                                                               patience=patience)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
         epoch_start = 0
 
         if continue_training:
@@ -264,15 +248,16 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--path', required=True, type=str, help='Path to the dataset folder')
     parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
-    parser.add_argument('--model_name', required=False, type=str, default="Xin_V2", help='named of the model to save')
+    parser.add_argument('--model_name', required=False, type=str, default="Xin_VAR2", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
     parser.add_argument('--LR', required=False, type=float, default=1e-04, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
     parser.add_argument('--max_num_worker', required=False, type=int, default=1, help='number of worker to load data')
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
-    parser.add_argument("--num_views", required=False, type=int, default=3, help="Number of views")
+    parser.add_argument("--num_views", required=False, type=int, default=2, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
+    parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s",
                         help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="max",
@@ -282,8 +267,8 @@ if __name__ == '__main__':
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
-    parser.add_argument("--patience", required=False, type=int, default=2, help="Patience parameter")
-    parser.add_argument("--factor", required=False, type=float, default=0.5, help="Factor parameter")
+    parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
+    parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
 
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
