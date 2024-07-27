@@ -2,20 +2,20 @@ import os
 import logging
 import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
-from torch.utils.data import DataLoader
-from src.custom_trainers.train_hybrid import trainer
+from src.custom_trainers.train_videomae import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
-from src.custom_model.hybrid_mvit_v2 import MultiVideoHybridMVit2
-from torchvision.models.video import MViT_V2_S_Weights
+from src.custom_model.video_mae import VideoMAENetwork
+from src.custom_dataset.video_mae_dataset import MultiViewMAEDataset
 
 
 
 def checkArguments():
+
     # args.num_views
-    if args.num_views > 5 or args.num_views < 1:
+    if args.num_views > 5 or  args.num_views < 1:
         print("Could not find your desired argument for --args.num_views:")
         print("Possible number of views are: 1, 2, 3, 4, 5")
         exit()
@@ -25,6 +25,13 @@ def checkArguments():
         print("Could not find your desired argument for --args.data_aug:")
         print("Possible arguments are: Yes or No")
         exit()
+
+    # args.pooling_type
+    if args.pooling_type != 'max' and args.pooling_type != 'mean' and args.pooling_type != 'attention':
+        print("Could not find your desired argument for --args.pooling_type:")
+        print("Possible arguments are: max or mean")
+        exit()
+
     # args.weighted_loss
     if args.weighted_loss != 'Yes' and args.weighted_loss != 'No':
         print("Could not find your desired argument for --args.weighted_loss:")
@@ -32,19 +39,19 @@ def checkArguments():
         exit()
 
     # args.start_frame
-    if args.start_frame > 124 or args.start_frame < 0 or args.end_frame - args.start_frame < 2:
+    if args.start_frame > 124 or  args.start_frame < 0 or args.end_frame - args.start_frame < 2:
         print("Could not find your desired argument for --args.start_frame:")
         print("Choose a number between 0 and 124 and smaller as --args.end_frame")
         exit()
 
     # args.end_frame
-    if args.end_frame < 1 or args.end_frame > 125:
+    if args.end_frame < 1 or  args.end_frame > 125:
         print("Could not find your desired argument for --args.end_frame:")
         print("Choose a number between 1 and 125 and greater as --args.start_frame")
         exit()
 
     # args.fps
-    if args.fps > 25 or args.fps < 1:
+    if args.fps > 25 or  args.fps < 1:
         print("Could not find your desired argument for --args.fps:")
         print("Possible number for the fps are between 1 and 25")
         exit()
@@ -68,8 +75,8 @@ def main(*args):
                     (args.end_frame - args.start_frame) / (((args.end_frame - args.start_frame) / 25) * args.fps)))
         batch_size = args.batch_size
         data_aug = args.data_aug
-        video_shift_aug = args.video_shift_aug
         path = args.path
+        pooling_type = args.pooling_type
         weighted_loss = args.weighted_loss
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
@@ -85,9 +92,24 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
-                            "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size))))))
-    os.makedirs(best_model_path, exist_ok=True)
+    os.makedirs(os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model,
+                                                                                                          os.path.join(
+                                                                                                              str(LR),
+                                                                                                              "_B" + str(
+                                                                                                                  batch_size) + "_F" + str(
+                                                                                                                  number_of_frames) + "_S" + "_G" + str(
+                                                                                                                  gamma) + "_Step" + str(
+                                                                                                                  step_size)))))),
+                exist_ok=True)
+
+    best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views),
+                                                                                   os.path.join(pre_model,
+                                                                                                os.path.join(str(LR),
+                                                                                                             "_B" + str(
+                                                                                                                 batch_size) + "_F" + str(
+                                                                                                                 number_of_frames) + "_S" + "_G" + str(
+                                                                                                                 gamma) + "_Step" + str(
+                                                                                                                 step_size))))))
 
     log_path = os.path.join(best_model_path, "logging.log")
 
@@ -99,59 +121,41 @@ def main(*args):
             logging.StreamHandler()
         ]
     )
-
     # Initialize the data augmentation
     if data_aug == 'Yes':
         transformAug = transforms.Compose([
-            transforms.RandomRotation(degrees=5),
-            transforms.RandomHorizontalFlip()
-        ])
+                                          transforms.RandomRotation(degrees=5),
+                                          transforms.ColorJitter(brightness=0.5, saturation=0.5, contrast=0.5),
+                                          transforms.RandomHorizontalFlip()
+                                          ])
     else:
         transformAug = None
 
-    transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
-    dataset_Train = MultiViewDatasetHybrid(path=path,
-                                     start=start_frame,
-                                     end=end_frame,
-                                     fps=fps,
-                                     split='train',
-                                     num_views=num_views,
-                                     transform=transformAug,
-                                     transform_model=transforms_model,
-                                     video_shift_aug=video_shift_aug)
-
-    dataset_Valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
-                                      num_views=num_views,
-                                      transform_model=transforms_model)
-
-    dataset_Test2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='test',
-                                     num_views=num_views,
-                                     transform_model=transforms_model)
-
-
+    dataset_Train = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
+                                        num_views=num_views, transform=transformAug)
+    dataset_Valid2 = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
+                                         num_views=5)
+    dataset_Test2 = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views=5)
 
     print('Dataset initialization- finished')
 
     print('Dataloaders initalization ...')
 
     # Create the dataloaders for train validation and test datasets
-    train_loader = DataLoader(dataset_Train, batch_size=batch_size, shuffle=True,
-                              num_workers=max_num_worker, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(dataset_Train,
+                                               batch_size=batch_size, shuffle=False,
+                                               num_workers=max_num_worker, pin_memory=True)
 
-    val_loader2 = DataLoader(dataset_Valid2,
-                             batch_size=batch_size, shuffle=False,
-                             num_workers=max_num_worker, pin_memory=True)
+    val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,
+                                              batch_size=1, shuffle=False,
+                                              num_workers=max_num_worker, pin_memory=True)
 
-    test_loader2 = DataLoader(dataset_Test2,
-                              batch_size=batch_size, shuffle=False,
-                              num_workers=max_num_worker,  pin_memory=False)
+    test_loader2 = torch.utils.data.DataLoader(dataset_Test2,
+                                               batch_size=1, shuffle=False,
+                                               num_workers=max_num_worker, pin_memory=True)
 
     print('Dataloaders initalization - finished')
-
-    ###################################
-    #       LOADING THE MODEL         #
-    ###################################
-    model = MultiVideoHybridMVit2(num_views=num_views).cuda()
+    model = VideoMAENetwork()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -161,11 +165,10 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
-                                      betas=(0.9, 0.95), eps=1e-04,
+                                      betas=(0.9, 0.999), eps=1e-07,
                                       weight_decay=weight_decay, amsgrad=False)
 
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-
 
         epoch_start = 0
 
@@ -186,6 +189,19 @@ def main(*args):
             criterion_action = nn.CrossEntropyLoss()
             criterion = [criterion_offence_severity, criterion_action]
 
+    # Start training or evaluation
+    if only_evaluation == 0:
+        prediction_file = evaluation(
+            test_loader2,
+            model,
+            set_name="test",
+        )
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+        print("TEST")
+        print(results)
+    elif only_evaluation == 2:
+        pass
+    else:
         trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
                 best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs)
 
@@ -197,26 +213,28 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--path', required=True, type=str, help='Path to the dataset folder')
     parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
-    parser.add_argument('--model_name', required=False, type=str, default="Hybrid_mvit_num4", help='named of the model to save')
+    parser.add_argument('--model_name', required=False, type=str, default="VIDEO_MAE2", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
-    parser.add_argument('--LR', required=False, type=float, default=1e-04, help='Learning Rate')
+    parser.add_argument('--LR', required=False, type=float, default=5e-04, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
     parser.add_argument('--max_num_worker', required=False, type=int, default=1, help='number of worker to load data')
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
-    parser.add_argument("--num_views", required=False, type=int, default=2, help="Number of views")
-    parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
-    parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
-    parser.add_argument("--pre_model", required=False, type=str, default="hybrid_vit_v2_s",
+    parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
+    parser.add_argument("--data_aug", required=False, type=str, default="No", help="Data augmentation")
+    parser.add_argument("--pre_model", required=False, type=str, default="video_mae",
                         help="Name of the pretrained model")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
+    parser.add_argument("--pooling_type", required=False, type=str, default="mean",
+                        help="Which type of pooling should be done")
+    parser.add_argument("--weighted_loss", required=False, type=str, default="No",
                         help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
-    parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
-    parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
+    parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
+    parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
+    parser.add_argument("--weight_decay", required=False, type=float, default=0.05, help="Weight decacy")
+
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
     parser.add_argument("--path_to_model_weights", required=False, type=str, default="",

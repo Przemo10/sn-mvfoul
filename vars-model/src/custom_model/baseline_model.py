@@ -1,11 +1,10 @@
-
-import __future__
 import torch
-from mvaggregate import MVAggregate
+from src.custom_model.mvaggregate import MVAggregate
 from torchvision.models.video import r3d_18, R3D_18_Weights, MC3_18_Weights, mc3_18
 from torchvision.models.video import r2plus1d_18, R2Plus1D_18_Weights, s3d, S3D_Weights
-from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights, mvit_v1_b, MViT_V1_B_Weights
-
+from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights
+from torchvision.models.video import swin3d_s, Swin3D_S_Weights
+from transformers import VideoMAEForVideoClassification
 
 
 class MVNetwork(torch.nn.Module):
@@ -36,6 +35,13 @@ class MVNetwork(torch.nn.Module):
             weights_model = MViT_V2_S_Weights.DEFAULT
             network = mvit_v2_s(weights=weights_model)
             self.feat_dim = 400
+        elif net_name == "swin3d_s":
+            weights_model = Swin3D_S_Weights.DEFAULT
+            network = swin3d_s(weights=weights_model)
+            self.feat_dim = 400
+        elif net_name == "video_mae":
+            network = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+            self.feet_dim = 400
         else:
             weights_model = R2Plus1D_18_Weights.DEFAULT
             network = r2plus1d_18(weights=weights_model)

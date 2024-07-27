@@ -24,27 +24,46 @@ class MultiVideoHybridMVit2(nn.Module):
         self.model = mvit_v2_s(weights=weights)
         self.embed_dim = 96
         self.feet_dim = 400
-        self.org_dim = self.model.head[1].in_features
+        self.token_dim = 768
+        self.intern = nn.Sequential(
+            nn.Linear(self.token_dim, self.feet_dim),
+            nn.BatchNorm1d(self.feet_dim),
+            nn.ReLU(),
+
+        )
 
         # Initialize the learnable image embedding matrix
         self.img_embed_matrix = nn.Parameter(torch.zeros(1, self.n, self.embed_dim), requires_grad=True)
         nn.init.xavier_uniform_(self.img_embed_matrix)
 
         # Reuse the model head layer for classification tasks
-        self.tmp_head = self.model.head[1]
+        #self.tmp_head = self.model.head[1]
 
-        self.offence_head = self.tmp_head
-        self.action_head = self.tmp_head
+        #self.offence_head = self.tmp_head
+        #self.action_head = self.tmp_head
 
         # Initialize the classification head
-        self.fc_offence = nn.Linear(self.feet_dim, out_features=4)
-        self.fc_action = nn.Linear(self.feet_dim, out_features=8)
+        # self.fc_offence = nn.Linear(self.feet_dim, out_features=4)
+        # self.fc_action = nn.Linear(self.feet_dim, out_features=8)
 
-        nn.init.zeros_(self.fc_offence.weight)
-        nn.init.zeros_(self.fc_offence.bias)
+        self.fc_offence = nn.Sequential(
+            nn.Linear(self.feet_dim, 4)
+        )
+        self.fc_action = nn.Sequential(
+            nn.Linear(self.feet_dim, 8)
+        )
+        self.weights_init(self.fc_action)
+        self.weights_init(self.fc_offence)
 
-        nn.init.zeros_(self.fc_action.weight)
-        nn.init.zeros_(self.fc_action.bias)
+    def freeze_blocks(self, freeze: bool):
+        for param in self.model.blocks.parameters():
+            param.requires_grad = freeze
+
+    def weights_init(self, m):
+        if isinstance(m, nn.Linear):
+            torch.nn.init.xavier_uniform_(m.weight)
+            if m.bias:
+                torch.nn.init.zeros_(m.bias)
 
     def format_multi_frame_tokens(self, x, batch_size, tokens_per_frame):
         """
@@ -81,7 +100,7 @@ class MultiVideoHybridMVit2(nn.Module):
         # Normalize and add image embeddings
         image_embeddings = F.normalize(self.img_embed_matrix, dim=-1)
         # image_embeddings shape: [1, 2, 96] if n=2
-        # print(f"Image embeddings shape: {image_embeddings.shape}")
+        #print(f"Image embeddings shape: {image_embeddings.shape}")
 
         # Repeat embeddings to match the number of tokens per frame
         repeated_embeddings = torch.repeat_interleave(image_embeddings, tokens_per_frame - first_img_token_idx, dim=1)
@@ -148,6 +167,9 @@ class MultiVideoHybridMVit2(nn.Module):
                 # Update thw_shape after merging frames
                 thw_shape = (D * self.n, H, W)
                 # print(f"Updated thw_shape for mv_collection: {thw_shape}")
+                self.freeze_blocks(freeze=False)
+            else:
+                self.freeze_blocks(freeze=True)
 
             # Sequentially pass the tokens through each block with the thw argument
             for block in self.model.blocks:
@@ -157,34 +179,36 @@ class MultiVideoHybridMVit2(nn.Module):
 
             tokens = self.model.norm(tokens)
             # Shape after normalization: [4, 295, 768] if final number of tokens is 295 and embed_dim is 768
-            # print(f"Shape tokens after normalization: {tokens.shape}")
+            # print(f"Shape {view_type} tokens after normalization: {tokens.shape}")
 
-            selected_tokens = tokens[:, 0] # TO DO MIX
+            selected_tokens = tokens[:,0] #torch.mean(tokens, dim=1)  # torch.max(tokens, dim=1)[0] #tokens[:, 0] # TO DO MIX
 
-            offence_logits = self.offence_head(selected_tokens)
-            action_logits = self.action_head(selected_tokens)
+            selected_tokens = self.intern(selected_tokens)
 
-            # print(f"Offence tokens after head: {offence_logits.shape}")
-            # print(f"Action tokens after head: {action_logits.shape}")
-            offence_logits = self.fc_offence(offence_logits)
-            action_logits = self.fc_action(action_logits)
+            offence_logits = self.fc_offence(selected_tokens)
+            action_logits = self.fc_action(selected_tokens)
             # Shape of logits: [batch_size, num_classes], e.g., [4, 10]
             # print(f"Offence logits shape: {offence_logits.shape}")
             # print(f"Action logits shape: {action_logits.shape}")
 
             output_dict[view_type]['offence_logits'] = offence_logits
             output_dict[view_type]['action_logits'] = action_logits
-            # output_dict[view_type]['tokens'] = tokens
+
+        self.freeze_blocks(freeze=False)
 
         return output_dict
 
-
 # Usage example:
 # Initialize the model
-#model = MultiVideoHybridMVit2(num_views=4)
+model = MultiVideoHybridMVit2(num_views=2)
 # Example input: [batch_size, num_views, channels, depth, height, width]
-#videos = torch.randn(2, 4, 3, 10, 224, 224)
-#output = model(videos)
+#videos = torch.randn(4, 2, 3, 16, 224, 224)
+"""
+ (output_dict['single']['offence_logits'],output_dict['single']['action_logits'], 
+                output_dict['mv_collection']['offence_logits'], output_dict['mv_collection']['action_logits'])
+"""
+
 #print(list(output.keys()))
 #print(list(output['single'].keys()))
 #print(output)
+# model(videos)

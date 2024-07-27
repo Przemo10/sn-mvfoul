@@ -1,20 +1,18 @@
 import os
 import logging
 import time
-import numpy as np
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from dataset import MultiViewDataset
-from train import trainer, evaluation
+from src.custom_dataset.baseline_dataset import MultiViewDataset
+from src.custom_trainers.train import trainer, evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
-from model import MVNetwork
-from config.classes import EVENT_DICTIONARY, INVERSE_EVENT_DICTIONARY
+from src.custom_model.baseline_model import MVNetwork
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
-from torchvision.models.video import MViT_V2_S_Weights, MViT_V1_B_Weights
-from torchvision.models.video import mvit_v2_s, MViT_V2_S_Weights, mvit_v1_b, MViT_V1_B_Weights
+from torchvision.models.video import MViT_V2_S_Weights
+from torchvision.models.video import swin3d_s,  Swin3D_S_Weights
 
 
 def checkArguments():
@@ -32,7 +30,7 @@ def checkArguments():
         exit()
 
     # args.pooling_type
-    if args.pooling_type != 'max' and args.pooling_type != 'mean' and args.pooling_type != 'attention':
+    if args.pooling_type not in ['max', 'mean', 'attention', 'max_mean_alpha', 'max_mean_weight']:
         print("Could not find your desired argument for --args.pooling_type:")
         print("Possible arguments are: max or mean")
         exit()
@@ -72,7 +70,6 @@ def main(*args):
         start_frame = args.start_frame
         end_frame = args.end_frame
         weight_decay = args.weight_decay
-        
         model_name = args.model_name
         pre_model = args.pre_model
         num_views = args.num_views
@@ -80,6 +77,7 @@ def main(*args):
         number_of_frames = int((args.end_frame - args.start_frame) / ((args.end_frame - args.start_frame) / (((args.end_frame - args.start_frame) / 25) * args.fps)))
         batch_size = args.batch_size
         data_aug = args.data_aug
+        video_shift_aug = args.video_shift_aug
         path = args.path
         pooling_type = args.pooling_type
         weighted_loss = args.weighted_loss
@@ -97,11 +95,10 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    os.makedirs(os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
-                            "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size)))))), exist_ok=True)
 
     best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
                             "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size))))))
+    os.makedirs(best_model_path, exist_ok=True)
 
 
     log_path = os.path.join(best_model_path, "logging.log")
@@ -138,6 +135,9 @@ def main(*args):
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
     elif pre_model == "mvit_v2_s":
         transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
+    elif pre_model == "swin3d_s":
+        transforms_model = Swin3D_S_Weights.KINETICS400_V1.transforms()
+        print("swin3d_s")
     else:
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         print("Warning: Could not find the desired pretrained model")
@@ -178,8 +178,9 @@ def main(*args):
 
         print('Dataset initialization- starts... ')
         # Create Train Validation and Test datasets
-        dataset_Train = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
-            num_views = num_views, transform=transformAug, transform_model=transforms_model)
+        dataset_Train = MultiViewDataset(
+            path=path, start=start_frame, end=end_frame, fps=fps, split='train', num_views = num_views,
+            transform=transformAug, transform_model=transforms_model,video_shift_aug=video_shift_aug)
         dataset_Valid2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid', num_views = 5,
             transform_model=transforms_model)
         dataset_Test2 = MultiViewDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views = 5,
@@ -191,7 +192,7 @@ def main(*args):
 
         # Create the dataloaders for train validation and test datasets
         train_loader = torch.utils.data.DataLoader(dataset_Train,
-            batch_size=batch_size, shuffle=True,
+            batch_size=batch_size, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
 
         val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,
@@ -225,6 +226,7 @@ def main(*args):
         epoch_start = 0
 
         if continue_training:
+            print(2048)
             path_model = os.path.join(log_path, 'model.pth.tar')
             load = torch.load(path_model)
             model.load_state_dict(load['state_dict'])
@@ -298,7 +300,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)    
     parser.add_argument('--path',   required=True, type=str, help='Path to the dataset folder' )
     parser.add_argument('--max_epochs',   required=False, type=int,   default=60,     help='Maximum number of epochs' )
-    parser.add_argument('--model_name',   required=False, type=str,   default="VARS",     help='named of the model to save' )
+    parser.add_argument('--model_name',   required=False, type=str,   default="VARS_shift3",     help='named of the model to save' )
     parser.add_argument('--batch_size', required=False, type=int,   default=2,     help='Batch size' )
     parser.add_argument('--LR',       required=False, type=float,   default=1e-04, help='Learning Rate' )
     parser.add_argument('--GPU',        required=False, type=int,   default=-1,     help='ID of the GPU to use' )
@@ -307,14 +309,15 @@ if __name__ == '__main__':
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
-    parser.add_argument("--pre_model", required=False, type=str, default="r2plus1d_18", help="Name of the pretrained model")
-    parser.add_argument("--pooling_type", required=False, type=str, default="max", help="Which type of pooling should be done")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the loss should be weighted")
+    parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
+    parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
+    parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
+    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
-    parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
+    parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
 
     parser.add_argument("--only_evaluation", required=False, type=int, default=3, help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

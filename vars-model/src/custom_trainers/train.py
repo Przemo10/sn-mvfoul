@@ -1,13 +1,12 @@
 import logging
 import os
-import time
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
-from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 from tqdm import tqdm
+from src.soccernet_evaluate import  evaluate
 
 def trainer(train_loader,
             val_loader2,
@@ -50,9 +49,8 @@ def trainer(train_loader,
         )
 
         results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
-        print("TRAINING")
+        print(f"TRAINING loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
         print(results)
-
         ###################### VALIDATION ###################
         prediction_file, loss_action, loss_offence_severity = train(
             val_loader2,
@@ -66,7 +64,7 @@ def trainer(train_loader,
         )
 
         results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
-        print("VALIDATION")
+        print(f"VALIDATION: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
         print(results)
 
 
@@ -83,7 +81,7 @@ def trainer(train_loader,
             )
 
         results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
-        print("TEST")
+        print(f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
         print(results)
         
 
@@ -138,7 +136,7 @@ def train(dataloader,
 
     actions = {}
 
-    if True:
+    if torch.set_grad_enabled(train):
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
 
             targets_offence_severity = targets_offence_severity.cuda()
@@ -150,10 +148,15 @@ def train(dataloader,
 
             # compute output
             outputs_offence_severity, outputs_action, _ = model(mvclips)
-            
+
+
             if len(action) == 1:
-                preds_sev = torch.argmax(outputs_offence_severity, 0)
-                preds_act = torch.argmax(outputs_action, 0)
+
+                preds_sev = torch.argmax(outputs_offence_severity, 0) # dla video-mae
+                preds_act = torch.argmax(outputs_action,0)
+                # preds_sev = torch.argmax(outputs_offence_severity, 0)
+                # preds_act = torch.argmax(outputs_action,0)  # dla mvit-
+
 
                 values = {}
                 values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
@@ -171,6 +174,7 @@ def train(dataloader,
                     values["Severity"] = "5.0"
                 actions[action[0]] = values       
             else:
+
                 preds_sev = torch.argmax(outputs_offence_severity.detach().cpu(), 1)
                 preds_act = torch.argmax(outputs_action.detach().cpu(), 1)
 
@@ -197,7 +201,7 @@ def train(dataloader,
             if len(outputs_action.size()) == 1:
                 outputs_action = outputs_action.unsqueeze(0)  
    
-            #compute the loss
+            #compute the custom_loss
             loss_offence_severity = criterion[0](outputs_offence_severity, targets_offence_severity)
             loss_action = criterion[1](outputs_action, targets_action)
 
@@ -207,6 +211,7 @@ def train(dataloader,
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
                 loss.backward()
+                #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             loss_total_action += float(loss_action)

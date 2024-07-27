@@ -2,12 +2,12 @@ from torch.utils.data import Dataset
 from random import random
 import torch
 import random
-from data_loader import label2vectormerge, clips2vectormerge
+from src.custom_dataset.data_loader import label2vectormerge, clips2vectormerge
 from torchvision.io.video import read_video
 
 
 class MultiViewDataset(Dataset):
-    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None):
+    def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None,video_shift_aug=0):
 
         if split != 'chall':
             # To load the annotations
@@ -50,6 +50,7 @@ class MultiViewDataset(Dataset):
         self.factor = (end - start) / (((end - start) / 25) * fps)
 
         self.length = len(self.clips)
+        self.video_shift_aug = video_shift_aug
         print(self.length)
 
     def getDistribution(self):
@@ -82,16 +83,24 @@ class MultiViewDataset(Dataset):
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
             cont = True
-            if self.split != 'train2':
+            if self.split == 'train':
                 while cont:
                     aux = random.randint(0,len(self.clips[index])-1)
                     if aux not in prev_views or len(prev_views) >= len(self.clips[index]):
                         cont = False
                 index_view = aux
                 prev_views.append(index_view)
-
-            video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
-            frames = video[self.start:self.end,:,:,:]
+            # print(self.clips[index], print(self.clips[index][index_view]))
+            video, _, _ = read_video(self.clips[index][index_view],
+                                     output_format="THWC", pts_unit='sec')
+            # print(video.shape)
+            if self.split == 'train' and self.video_shift_aug > 0:
+                rand_shift = random.randint(-self.video_shift_aug, self.video_shift_aug)
+                start = self.start + rand_shift
+                end = self.end + rand_shift
+                frames = video[start:end, :, :, :]
+            else:
+                frames = video[self.start:self.end, :, :, :]
 
             final_frames = None
 
@@ -108,6 +117,7 @@ class MultiViewDataset(Dataset):
                 final_frames = self.transform(final_frames)
 
             final_frames = self.transform_model(final_frames)
+            # print(final_frames.shape)
             final_frames = final_frames.permute(1, 0, 2, 3)
             
             if num_view == 0:
@@ -127,5 +137,4 @@ class MultiViewDataset(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return self.length
-
+        return  self.length

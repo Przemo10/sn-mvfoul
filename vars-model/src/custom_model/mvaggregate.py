@@ -1,4 +1,6 @@
-from utils import batch_tensor, unbatch_tensor
+from scipy.sparse import random
+from six import print_
+from src.utils import batch_tensor, unbatch_tensor
 import torch
 from torch import nn
 
@@ -86,6 +88,53 @@ class ViewAvgAggregate(nn.Module):
         return pooled_view.squeeze(), aux
 
 
+class ViewMaxMeanAlphaAggregate(nn.Module):
+
+    # source article https://s3.ap-northeast-2.amazonaws.com/journal-home/journal/jips/fullText/302/13.pdf
+    def __init__(self,  model, lifting_net=nn.Sequential()):
+        super().__init__()
+        self.model = model
+        self.lifting_net = lifting_net
+        random_value = torch.rand(1)
+        self.alpha = nn.Parameter(random_value)
+        self.beta = nn.Parameter(1 - random_value)
+        self.relu = nn.ReLU()
+
+    def forward(self, mvimages):
+        B, V, C, D, H, W = mvimages.shape # Batch, Views, Channel, Depth, Height, Width
+        aux = self.lifting_net(unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True))
+        max_pool = torch.max(aux, dim=1)[0]
+        mean_pool = torch.mean(aux, dim=1)
+        pooled_view = self.alpha * mean_pool + self.beta * max_pool
+        pooled_view = self.relu(pooled_view)
+
+        return pooled_view.squeeze(), aux
+
+class ViewMaxMeanWeightAggregate(nn.Module):
+
+    # source article https://s3.ap-northeast-2.amazonaws.com/journal-home/journal/jips/fullText/302/13.pdf
+    def __init__(self,  model, feat_dim, lifting_net=nn.Sequential()):
+        super().__init__()
+        self.model = model
+        self.lifting_net = lifting_net
+        self.feat_dim = feat_dim
+        w1 = torch.rand(self.feat_dim)
+        w2 = torch.rand(self.feat_dim)
+        self.max_pool_weight = nn.Parameter(torch.div(w1, torch.sum(w1)))
+        self.mean_pool_weight = nn.Parameter(torch.div(w2, torch.sum(w2)))
+        self.relu = nn.ReLU()
+
+    def forward(self, mvimages):
+        B, V, C, D, H, W = mvimages.shape # Batch, Views, Channel, Depth, Height, Width
+        aux = self.lifting_net(unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True))
+        max_pool = torch.max(aux, dim=1)[0]
+        mean_pool = torch.mean(aux, dim=1)
+        pooled_view = 0.5 * torch.mul(self.max_pool_weight, max_pool) + 0.5 * torch.mul(self.mean_pool_weight, mean_pool)
+        pooled_view = self.relu(pooled_view)
+
+        return pooled_view.squeeze(), aux
+
+
 class MVAggregate(nn.Module):
     def __init__(self,  model, agr_type="max", feat_dim=400, lifting_net=nn.Sequential()):
         super().__init__()
@@ -114,12 +163,16 @@ class MVAggregate(nn.Module):
             self.aggregation_model = ViewMaxAggregate(model=model, lifting_net=lifting_net)
         elif self.agr_type == "mean":
             self.aggregation_model = ViewAvgAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "max_mean_alpha":
+            self.aggregation_model = ViewMaxMeanAlphaAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "max_mean_weight":
+            self.aggregation_model = ViewMaxMeanWeightAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
         else:
             self.aggregation_model = WeightedAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
 
     def forward(self, mvimages):
 
-        pooled_view, attention = self.aggregation_model(mvimages)
+        pooled_view, attention = self.aggregation_model(mvimages) # dla mvit (4,400),  (4,2,400)
 
         inter = self.inter(pooled_view)
         pred_action = self.fc_action(inter)
