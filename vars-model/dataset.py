@@ -13,12 +13,13 @@ class MultiViewDataset(Dataset):
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity,self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
-            self.clips = self.clips[:10]
+            # self.clips = self.clips[:10] # TODO: REMOVE THIS LINE
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity, len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
 
             self.weights_offence_severity = torch.div(1, self.distribution_offence_severity)
             self.weights_action = torch.div(1, self.distribution_action)
+            self.num_views = num_views
         else:
             self.clips = clips2vectormerge(path, split, num_views, [])
 
@@ -68,12 +69,15 @@ class MultiViewDataset(Dataset):
 
         prev_views = []
 
-        for num_view in range(len(self.clips[index])):
+        for num_view in range(self.num_views):
 
-            index_view = num_view
+            if num_view >= len(self.clips[index]):
+                index_view = random.randint(0,len(self.clips[index])-1)
+            else:
+                index_view = num_view
 
-            if len(prev_views) == 2:
-                continue
+            #if len(prev_views) == self.num_views:
+            #    break
 
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
@@ -81,7 +85,7 @@ class MultiViewDataset(Dataset):
             if self.split != 'train2':
                 while cont:
                     aux = random.randint(0,len(self.clips[index])-1)
-                    if aux not in prev_views:
+                    if aux not in prev_views or len(prev_views) >= len(self.clips[index]):
                         cont = False
                 index_view = aux
                 prev_views.append(index_view)

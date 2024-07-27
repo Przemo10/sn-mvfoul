@@ -7,8 +7,15 @@ config/__pycache__/
 vars-model/dataset/*.zip
 vars-model/dataset224p/*
 vars-model/dataset720p/*
+vars-model/VARS
 dataset/*
 dataset224p/*
 dataset720p/*
 .ipynb_checkpoints
 ../Evaluate/
+models/VARS/*
+VARS/*
+runs/*
+vars-interface/
+vars-model/runs/
+vars-model/*.zip
