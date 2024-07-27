@@ -60,7 +60,8 @@ def trainer(train_loader,
             epoch + 1,
             model_name,
             train = False,
-            set_name="valid"
+            set_name="valid",
+            writer=writer,
         )
 
         results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
@@ -78,6 +79,7 @@ def trainer(train_loader,
                 model_name,
                 train=False,
                 set_name="test",
+                writer=writer,
             )
 
         results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
@@ -130,13 +132,14 @@ def train(dataloader,
         os.mkdir(model_name) 
 
     # path where we will save the results
-    prediction_file = "predicitions_" + set_name + "_epoch_" + str(epoch) + ".json"
+    prediction_file = f"predicitions_{set_name}_epoch_{epoch}.json"
+
     data = {}
     data["Set"] = set_name
 
     actions = {}
 
-    if torch.set_grad_enabled(train):
+    with torch.set_grad_enabled(train):
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
 
             targets_offence_severity = targets_offence_severity.cuda()
@@ -218,18 +221,16 @@ def train(dataloader,
             loss_total_offence_severity += float(loss_offence_severity)
             total_loss += 1
             if writer is not None:
-                if set_name == "train":
-                    writer.add_scalar("Loss/train - action", loss_total_action, epoch)
-                    writer.add_scalar("Loss/train - offence", loss_total_offence_severity, epoch)
-                    writer.add_scalar("Loss/train", loss_total_offence_severity + loss_total_action, epoch)
-                if set_name == "valid":
-                    writer.add_scalar("Loss/valid - action", loss_total_action, epoch)
-                    writer.add_scalar("Loss/valid - offence", loss_total_offence_severity, epoch)
-                    writer.add_scalar("Loss/valid", loss_total_offence_severity + loss_total_action, epoch)
-                if set_name == "test":
-                    writer.add_scalar("Loss/test - action", loss_total_action, epoch)
-                    writer.add_scalar("Loss/test - offence", loss_total_offence_severity, epoch)
-                    writer.add_scalar("Loss/test", loss_total_offence_severity + loss_total_action, epoch)
+                writer.add_scalars(
+                    model_name + f" - Loss/{set_name}",
+                    {
+                        "action": loss_total_action,
+                        "offence": loss_total_offence_severity,
+                        "total": loss_total_offence_severity + loss_total_action
+                    },
+                    epoch
+                )
+
           
         gc.collect()
         torch.cuda.empty_cache()
@@ -251,7 +252,7 @@ def evaluation(dataloader,
 
     model.eval()
 
-    prediction_file = "predicitions_" + set_name + ".json"
+    prediction_file = f"predicitions_{set_name}.json"
     data = {}
     data["Set"] = set_name
 

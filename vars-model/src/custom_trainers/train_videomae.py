@@ -1,6 +1,7 @@
 import logging
 import os
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
@@ -24,6 +25,7 @@ def trainer(train_loader,
             ):
     logging.info("start training")
     counter = 0
+    writer = SummaryWriter()
 
     for epoch in range(epoch_start, max_epochs):
 
@@ -43,6 +45,7 @@ def trainer(train_loader,
             train=True,
             set_name="train",
             pbar=pbar,
+            writer=writer,
         )
 
         results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
@@ -57,7 +60,8 @@ def trainer(train_loader,
             epoch + 1,
             model_name,
             train=False,
-            set_name="valid"
+            set_name="valid",
+            writer=writer,
         )
 
         results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
@@ -74,6 +78,7 @@ def trainer(train_loader,
             model_name,
             train=False,
             set_name="test",
+            writer=writer,
         )
 
         results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
@@ -94,6 +99,7 @@ def trainer(train_loader,
             path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
             torch.save(state, path_aux)
 
+    writer.flush()
     pbar.close()
     return
 
@@ -107,6 +113,7 @@ def train(dataloader,
           train=False,
           set_name="train",
           pbar=None,
+          writer=None,
           ):
     # switch to train mode
     if train:
@@ -175,6 +182,19 @@ def train(dataloader,
             loss_total_action += float(loss_action)
             loss_total_offence_severity += float(loss_offence_severity)
             total_loss += 1
+            if writer is not None:
+                if set_name == "train":
+                    writer.add_scalar(model_name + " - Loss/train - action", loss_total_action, epoch)
+                    writer.add_scalar(model_name + " - Loss/train - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar(model_name + " - Loss/train", loss_total_offence_severity + loss_total_action, epoch)
+                if set_name == "valid":
+                    writer.add_scalar(model_name + " - Loss/valid - action", loss_total_action, epoch)
+                    writer.add_scalar(model_name + " - Loss/valid - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar(model_name + " - Loss/valid", loss_total_offence_severity + loss_total_action, epoch)
+                if set_name == "test":
+                    writer.add_scalar(model_name + " - Loss/test - action", loss_total_action, epoch)
+                    writer.add_scalar(model_name + " - Loss/test - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar(model_name + " - Loss/test", loss_total_offence_severity + loss_total_action, epoch)
 
         gc.collect()
         torch.cuda.empty_cache()

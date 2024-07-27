@@ -1,5 +1,6 @@
 import os
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
@@ -34,6 +35,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
     all_losses = {'train': [], 'valid': [], 'test': []}
     all_results = {'train_single0': [], 'train_multi': [], 'valid_single': [], 'valid_multi': [], 'test_single': [],
                    'test_multi': []}
+    
+    writer = SummaryWriter()
 
     for epoch in range(epoch_start, max_epochs):
         print(f"Epoch {epoch + 1}/{max_epochs}")
@@ -52,7 +55,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             train=True,
             set_name="train",
             pbar=pbar,
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         train_loss = loss_offence_severity + loss_action
 
@@ -75,7 +79,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             model_name,
             train=False,
             set_name="valid",
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         valid_loss = loss_offence_severity + loss_action
         results_multi = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
@@ -97,7 +102,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             model_name,
             train=False,
             set_name="test",
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         test_loss = loss_offence_severity + loss_action
         results_multi = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
@@ -138,12 +144,13 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, "last_model.pth.tar", all_losses,
                             all_results)
             print('Last model saved.')
+        writer.flush()
         pbar.close()
     return
 
 
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,
-          md_loss=None, scheduler=None):
+          md_loss=None, scheduler=None, writer=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # switch to train mode
@@ -232,6 +239,19 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             loss_total_action += float(multi_view_view_loss_action + single_view_loss_action)
             loss_total_offence_severity += float(multi_view_loss_offence_severity + single_view_loss_offence_severity)
             total_loss += 1
+            if writer is not None:
+                if set_name == "train":
+                    writer.add_scalar(model_name + " - Loss/train - action", loss_total_action, epoch)
+                    writer.add_scalar(model_name + " - Loss/train - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar(model_name + " - Loss/train", loss_total_offence_severity + loss_total_action, epoch)
+                if set_name == "valid":
+                    writer.add_scalar(model_name + " - Loss/valid - action", loss_total_action, epoch)
+                    writer.add_scalar(model_name + " - Loss/valid - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar(model_name + " - Loss/valid", loss_total_offence_severity + loss_total_action, epoch)
+                if set_name == "test":
+                    writer.add_scalar(model_name + " - Loss/test - action", loss_total_action, epoch)
+                    writer.add_scalar(model_name + " - Loss/test - offence", loss_total_offence_severity, epoch)
+                    writer.add_scalar(model_name + " - Loss/test", loss_total_offence_severity + loss_total_action, epoch)
 
         gc.collect()
         torch.cuda.empty_cache()
