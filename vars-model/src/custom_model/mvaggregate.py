@@ -179,3 +179,87 @@ class MVAggregate(nn.Module):
         pred_offence_severity = self.fc_offence(inter)
 
         return pred_offence_severity, pred_action, attention
+
+
+class MVAggregate2(nn.Module):
+    def __init__(self,  model, agr_type="max", feat_dim=400, lifting_net=nn.Sequential()):
+        super().__init__()
+        self.agr_type = agr_type
+
+        self.inter = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, feat_dim),
+        )
+
+        self.fc_offence = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, 4)
+        )
+
+        self.fc_action = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, 8)
+        )
+
+        if self.agr_type == "max":
+            self.aggregation_model = ViewMaxAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "mean":
+            self.aggregation_model = ViewAvgAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "max_mean_alpha":
+            self.aggregation_model = ViewMaxMeanAlphaAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "max_mean_weight":
+            self.aggregation_model = ViewMaxMeanWeightAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+        else:
+            self.aggregation_model = WeightedAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+
+    def forward(self, mvimages):
+
+        pooled_view, attention = self.aggregation_model(mvimages) # dla mvit (4,400),  (4,2,400)
+
+        inter = self.inter(pooled_view)
+        pred_action = self.fc_action(inter)
+        pred_offence_severity = self.fc_offence(inter)
+
+        return pred_offence_severity, pred_action, attention
+
+
+class MVAggregate2(nn.Module):
+    def __init__(self,  model, agr_type="max", feat_dim=400, lifting_net=nn.Sequential()):
+        super().__init__()
+        self.agr_type = agr_type
+
+        self.inter = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, feat_dim),
+        )
+
+        self.fc_offence = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, 4)
+        )
+
+        self.fc_action = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Linear(feat_dim, 8)
+        )
+
+        if self.agr_type == "max":
+            self.aggregation_model = ViewMaxAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "mean":
+            self.aggregation_model = ViewAvgAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "max_mean_alpha":
+            self.aggregation_model = ViewMaxMeanAlphaAggregate(model=model, lifting_net=lifting_net)
+        elif self.agr_type == "max_mean_weight":
+            self.aggregation_model = ViewMaxMeanWeightAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+        else:
+            self.aggregation_model = WeightedAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+
+    def forward(self, mvimages):
+
+        pooled_view, attention = self.aggregation_model(mvimages) # dla mvit (4,400),  (4,2,400)
+
+        inter = self.inter(pooled_view)
+        pred_action = self.fc_action(inter)
+        pred_offence_severity = self.fc_offence(inter)
+
+        return pred_offence_severity, pred_action, attention

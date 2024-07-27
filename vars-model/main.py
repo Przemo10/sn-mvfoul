@@ -5,14 +5,17 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
 from src.custom_dataset.baseline_dataset import MultiViewDataset
-from src.custom_trainers.train import trainer, evaluation
+from src.custom_trainers.train import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
 from src.custom_model.baseline_model import MVNetwork
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
-from torchvision.models.video import swin3d_s,  Swin3D_S_Weights
+from torchvision.models.video import Swin3D_S_Weights, Swin3D_T_Weights
+from src.soccernet_evaluate import  evaluate
+
+
 
 
 def checkArguments():
@@ -70,7 +73,8 @@ def main(*args):
         start_frame = args.start_frame
         end_frame = args.end_frame
         weight_decay = args.weight_decay
-        model_name = args.model_name
+        model_name = f"{args.model_name},_v{args.net_version}"
+        mv_aggregate_version = args.net_version
         pre_model = args.pre_model
         num_views = args.num_views
         fps = args.fps
@@ -95,9 +99,15 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
+    model_output_dirname = f"{LR}_F{number_of_frames}+_G{gamma}_Step{step_size}_mv{mv_aggregate_version}"
 
-    best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, os.path.join(str(LR),
-                            "_B" + str(batch_size) + "_F" + str(number_of_frames) + "_S" + "_G" + str(gamma) + "_Step" + str(step_size))))))
+    best_model_path = os.path.join(
+        "models",
+        os.path.join(model_name,
+                     os.path.join( str(num_views), os.path.join( pre_model, os.path.join(model_output_dirname) ))
+                     )
+    )
+
     os.makedirs(best_model_path, exist_ok=True)
 
 
@@ -137,7 +147,9 @@ def main(*args):
         transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
     elif pre_model == "swin3d_s":
         transforms_model = Swin3D_S_Weights.KINETICS400_V1.transforms()
-        print("swin3d_s")
+    elif pre_model == "swin3d_t":
+        transforms_model = Swin3D_T_Weights.KINETICS400_V1.transforms()
+        print(pre_model)
     else:
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
         print("Warning: Could not find the desired pretrained model")
@@ -208,7 +220,7 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-    model = MVNetwork(net_name=pre_model, agr_type=pooling_type).cuda()
+    model = MVNetwork(net_name=pre_model, agr_type=pooling_type, mv_aggregate_version=mv_aggregate_version).cuda()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -244,14 +256,39 @@ def main(*args):
             criterion_action = nn.CrossEntropyLoss()
             criterion = [criterion_offence_severity, criterion_action]
 
-
     # Start training or evaluation
     if only_evaluation == 0:
+        evaluation_results = sklearn_evaluation(
+            test_loader2, model, set_name="test", model_name = model_name,
+        )
+        print(evaluation_results)
         prediction_file = evaluation(
             test_loader2,
             model,
             set_name="test",
         ) 
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+        print("TEST")
+        print(results)
+
+    elif only_evaluation == 4:
+        evaluation_results = sklearn_evaluation(
+            train_loader, model, set_name="train", model_name = model_name,
+        )
+        print(evaluation_results)
+        evaluation_results = sklearn_evaluation(
+            val_loader2, model, set_name="valid", model_name = model_name,
+        )
+        print(evaluation_results)
+        evaluation_results = sklearn_evaluation(
+            test_loader2, model, set_name="test", model_name = model_name,
+        )
+        print(evaluation_results)
+        prediction_file = evaluation(
+            test_loader2,
+            model,
+            set_name="test",
+        )
         results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
@@ -311,6 +348,7 @@ if __name__ == '__main__':
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
+    parser.add_argument("--net_version", required=False, type=int, default=1, help="MvAggregateModelVersion")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")

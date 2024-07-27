@@ -5,7 +5,8 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 import torch
 from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
 from torch.utils.data import DataLoader
-from src.custom_trainers.train_hybrid import trainer
+from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
+from src.custom_trainers.train_hybrid import trainer,evaluation, sklearn_evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
 from src.custom_model.hybrid_mvit_v2 import MultiVideoHybridMVit2
@@ -110,6 +111,8 @@ def main(*args):
         transformAug = None
 
     transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
+
+
     dataset_Train = MultiViewDatasetHybrid(path=path,
                                      start=start_frame,
                                      end=end_frame,
@@ -157,6 +160,44 @@ def main(*args):
         path_model = os.path.join(path_to_model_weights)
         load = torch.load(path_model)
         model.load_state_dict(load['state_dict'])
+
+    if only_evaluation == 0:
+        print("Only evaluation 0")
+        evaluation_results = sklearn_evaluation(
+            test_loader2, model, set_name="test", model_name = model_name,
+        )
+        print(evaluation_results)
+        prediction_file = evaluation(
+            test_loader2,
+            model,
+            set_name="test",
+        )
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+        print("TEST")
+        print(results)
+
+    elif only_evaluation == 4:
+        print("Only evaluation 4")
+        evaluation_results = sklearn_evaluation(
+            train_loader, model, set_name="train", model_name = model_name,
+        )
+        print(evaluation_results)
+        evaluation_results = sklearn_evaluation(
+            val_loader2, model, set_name="valid", model_name = model_name,
+        )
+        print(evaluation_results)
+        evaluation_results = sklearn_evaluation(
+            test_loader2, model, set_name="test", model_name = model_name,
+        )
+        print(evaluation_results)
+        prediction_file = evaluation(
+            test_loader2,
+            model,
+            set_name="test",
+        )
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+        print("TEST")
+        print(results)
 
     if only_evaluation == 3:
 

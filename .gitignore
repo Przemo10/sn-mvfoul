@@ -12,3 +12,5 @@ dataset224p/*
 dataset720p/*
 .ipynb_checkpoints
 ../Evaluate/
+*.json
+*.tar

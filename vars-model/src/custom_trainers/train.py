@@ -6,6 +6,8 @@ from config.classes import INVERSE_EVENT_DICTIONARY
 import json
 from tqdm import tqdm
 from src.soccernet_evaluate import  evaluate
+from sklearn.metrics import confusion_matrix, classification_report
+
 
 def trainer(train_loader,
             val_loader2,
@@ -222,6 +224,80 @@ def train(dataloader,
     return os.path.join(model_name, prediction_file), loss_total_action / total_loss, loss_total_offence_severity / total_loss
 
 
+def sklearn_evaluation(dataloader,
+          model,
+          model_name="",
+          set_name="train",
+        ):
+
+    prediction_file = "sklearn_summary_" +model_name + "_" + set_name + ".json"
+
+    model.eval()
+    offence_labels = ["No offence", "Offence-no card", "Offence yellow", "Offence red"]
+    action_labels = [INVERSE_EVENT_DICTIONARY["action_class"][i] for i in range(0,8)]
+    targets_offence_severity_list = []
+    targets_action_list = []
+    pred_offence_list = []
+    pred_action_list = []
+    data = {}
+    data["Set"] = set_name
+    data["model_name"] =model_name
+
+    with torch.no_grad():
+        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(),1).numpy().tolist()
+            targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
+            mvclips = mvclips.cuda().float()
+            outputs_offence_severity, outputs_action, _ = model(mvclips)
+            if len(action) == 1:
+                preds_sev = torch.argmax(outputs_offence_severity, 0)
+                preds_act = torch.argmax(outputs_action, 0)
+                # add elements into list
+                targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
+                targets_action_list.extend(targets_action_int_or_list)
+                pred_offence_list.append(preds_sev.detach().cpu().numpy().tolist())
+                pred_action_list.append(preds_act.cpu().numpy().tolist())
+            else:
+                preds_sev = torch.argmax(outputs_offence_severity, 1)
+                preds_act = torch.argmax(outputs_action, 1)
+                targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
+                targets_action_list.extend(targets_action_int_or_list)
+                pred_offence_list.extend(preds_sev.detach().cpu().numpy().tolist())
+                pred_action_list.extend(preds_act.cpu().numpy().tolist())
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    targets_offence_severity_map_list = [offence_labels[idx] for idx in targets_offence_severity_list]
+    preds_offence_map_list = [offence_labels[idx] for idx in pred_offence_list]
+    targets_action_map_list = [action_labels[idx] for idx in targets_action_list]
+    preds_action_map_list = [action_labels[idx] for idx in pred_action_list]
+    cm_offence = confusion_matrix(
+        targets_offence_severity_map_list, preds_offence_map_list, labels=offence_labels
+    ).tolist()
+
+    print(targets_action_list)
+    print("**********")
+    print(pred_action_list)
+
+    cm_action = confusion_matrix(
+        targets_action_map_list, preds_action_map_list, labels=action_labels
+    ).tolist()
+    data['cm_offence'] = cm_offence
+    data['cm_actions'] = cm_action
+    print(cm_offence)
+    print(cm_action)
+
+    cr_offence = classification_report(
+        targets_offence_severity_list, pred_offence_list, target_names=offence_labels,output_dict=True
+    )
+    cr_action = classification_report(
+        targets_action_list, pred_action_list, target_names=action_labels, output_dict=True)
+    data['cr_offence'] = cr_offence
+    data['cr_action'] = cr_action
+    print(cr_offence)
+    print(cr_action)
+    with open(prediction_file, "w") as outfile:
+        json.dump(data, outfile)
 
 
 # Evaluation function to evaluate the test or the chall set

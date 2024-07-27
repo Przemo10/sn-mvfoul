@@ -176,11 +176,11 @@ def main(*args):
             transform_model=transforms_model,
             video_shift_aug=video_shift_aug)
         dataset_valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
-                                                num_views=num_views,
+                                                num_views=5,
                                                 transform_model=transforms_model)
 
         dataset_test2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='test',
-                                               num_views=num_views,
+                                               num_views=5,
                                                transform_model=transforms_model)
         print('Dataset initialization- finished')
 
@@ -191,11 +191,11 @@ def main(*args):
                                   num_workers=max_num_worker, pin_memory=True)
 
         val_loader2 = DataLoader(dataset_valid2,
-                                 batch_size=batch_size, shuffle=False,
+                                 batch_size=1, shuffle=False,
                                  num_workers=max_num_worker, pin_memory=True)
 
         test_loader2 = DataLoader(dataset_test2,
-                                  batch_size=batch_size, shuffle=False,
+                                  batch_size=1, shuffle=False,
                                   num_workers=max_num_worker, pin_memory=False)
 
         print('Dataloaders initalization - finished')
@@ -299,7 +299,7 @@ if __name__ == '__main__':
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s",
                         help="Name of the pretrained model")
-    parser.add_argument("--net_version", required=False, type=int, default=1, help="XinNetVersion")
+    parser.add_argument("--net_version", required=False, type=int, default=3, help="XinNetVersion")
     parser.add_argument("--pooling_type", required=False, type=str, default="max",
                         help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
