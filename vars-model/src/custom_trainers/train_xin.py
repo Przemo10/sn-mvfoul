@@ -240,18 +240,15 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             loss_total_offence_severity += float(multi_view_loss_offence_severity + single_view_loss_offence_severity)
             total_loss += 1
             if writer is not None:
-                if set_name == "train":
-                    writer.add_scalar(model_name + " - Loss/train - action", loss_total_action, epoch)
-                    writer.add_scalar(model_name + " - Loss/train - offence", loss_total_offence_severity, epoch)
-                    writer.add_scalar(model_name + " - Loss/train", loss_total_offence_severity + loss_total_action, epoch)
-                if set_name == "valid":
-                    writer.add_scalar(model_name + " - Loss/valid - action", loss_total_action, epoch)
-                    writer.add_scalar(model_name + " - Loss/valid - offence", loss_total_offence_severity, epoch)
-                    writer.add_scalar(model_name + " - Loss/valid", loss_total_offence_severity + loss_total_action, epoch)
-                if set_name == "test":
-                    writer.add_scalar(model_name + " - Loss/test - action", loss_total_action, epoch)
-                    writer.add_scalar(model_name + " - Loss/test - offence", loss_total_offence_severity, epoch)
-                    writer.add_scalar(model_name + " - Loss/test", loss_total_offence_severity + loss_total_action, epoch)
+                writer.add_scalars(
+                    f"Loss/{set_name}",
+                    {
+                        f"action - {model_name}": loss_total_action,
+                        f"offence - {model_name}": loss_total_offence_severity,
+                        f"total - {model_name}": loss_total_offence_severity + loss_total_action
+                    },
+                    epoch
+                )
 
         gc.collect()
         torch.cuda.empty_cache()

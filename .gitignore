@@ -15,7 +15,16 @@ dataset720p/*
 ../Evaluate/
 models/VARS/*
 VARS/*
+VARS*
+Xin*
+sklearn*
+predicitions*
+14*
+Hybrid*
+multi_*
+1
 runs/*
 vars-interface/
 vars-model/runs/
 vars-model/*.zip
+models/VIDEO*

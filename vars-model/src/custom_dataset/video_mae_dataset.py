@@ -18,6 +18,7 @@ class MultiViewMAEDataset(Dataset):
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity, self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(
                 path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
+            self.clips = self.clips[:10] # TODO: REMOVE THIS LINE
             self.clips = self.clips
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity,
                                                            len(self.labels_offence_severity))

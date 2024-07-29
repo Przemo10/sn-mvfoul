@@ -222,11 +222,11 @@ def train(dataloader,
             total_loss += 1
             if writer is not None:
                 writer.add_scalars(
-                    model_name + f" - Loss/{set_name}",
+                    f"Loss/{set_name}",
                     {
-                        "action": loss_total_action,
-                        "offence": loss_total_offence_severity,
-                        "total": loss_total_offence_severity + loss_total_action
+                        f"action - {model_name}": loss_total_action,
+                        f"offence - {model_name}": loss_total_offence_severity,
+                        f"total - {model_name}": loss_total_offence_severity + loss_total_action
                     },
                     epoch
                 )
