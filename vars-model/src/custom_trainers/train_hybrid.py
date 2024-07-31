@@ -1,5 +1,6 @@
 import os
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
@@ -33,6 +34,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
     all_losses = {'train': [], 'valid': [], 'test': []}
     all_results = {'train_single': [], 'train_multi': [], 'valid_single': [], 'valid_multi': [], 'test_single': [],
                    'test_multi': []}
+    writer = SummaryWriter()
 
     for epoch in range(epoch_start, max_epochs):
         print(f"Epoch {epoch + 1}/{max_epochs}")
@@ -52,7 +54,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             set_name="train",
             pbar=pbar,
             md_loss=md_loss,
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         train_loss = loss_mutual_distillation + loss_offence_severity + loss_action
 
@@ -79,7 +82,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             train=False,
             set_name="valid",
             md_loss=md_loss,
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         valid_loss = loss_mutual_distillation + loss_offence_severity + loss_action
 
@@ -106,7 +110,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                 train=False,
                 set_name="test",
                 md_loss=md_loss,
-                scheduler=scheduler
+                scheduler=scheduler,
+                writer=writer,
             )
             results_single = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file[0])
             results_multi = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file[1])
@@ -142,11 +147,12 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                             all_results)
             print('saved epoch model ')
 
+        writer.flush()
         pbar.close()
     return
 
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,
-          md_loss=None, scheduler=None):
+          md_loss=None, scheduler=None, writer=None,):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # switch to train mode
@@ -258,6 +264,16 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             loss_total_offence_severity += float(view_loss_offence_severity)
             loss_total_mutual_distillation += float(mutual_distillation_loss)
             total_loss += 1
+            if writer is not None:
+                writer.add_scalars(
+                    f"Loss/{set_name}",
+                    {
+                        f"action - {model_name}": loss_total_action,
+                        f"offence - {model_name}": loss_total_offence_severity,
+                        f"total - {model_name}": loss_total_offence_severity + loss_total_action
+                    },
+                    epoch
+                )
 
         gc.collect()
         torch.cuda.empty_cache()

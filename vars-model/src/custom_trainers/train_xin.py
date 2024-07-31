@@ -1,5 +1,6 @@
 import os
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
@@ -36,6 +37,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
     all_results = {'train_single0': [], 'train_multi': [], 'valid_single': [], 'valid_multi': [], 'test_single': [],
                    'test_multi': []}
 
+    writer = SummaryWriter()
+
     for epoch in range(epoch_start, max_epochs):
         print(f"Epoch {epoch + 1}/{max_epochs}")
 
@@ -53,7 +56,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             train=True,
             set_name="train",
             pbar=pbar,
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         train_loss = loss_offence_severity + loss_action
 
@@ -67,7 +71,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
         print(f" Multi : {results_multi}")
 
         ###################### VALIDATION ###################
-        prediction_file, loss_action, loss_offence_severity= train(
+        prediction_file, loss_action, loss_offence_severity = train(
             val_loader2,
             model,
             criterion,
@@ -76,7 +80,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             model_name,
             train=False,
             set_name="valid",
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         valid_loss = loss_offence_severity + loss_action
         results_multi = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
@@ -89,7 +94,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
         print(f" Multi : {results_multi}")
 
         #### TEST################################################################3
-        prediction_file, loss_action, loss_offence_severity= train(
+        prediction_file, loss_action, loss_offence_severity = train(
             val_loader2,
             model,
             criterion,
@@ -98,7 +103,8 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             model_name,
             train=False,
             set_name="test",
-            scheduler=scheduler
+            scheduler=scheduler,
+            writer=writer,
         )
         test_loss = loss_offence_severity + loss_action
         results_multi = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
@@ -114,7 +120,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
 
         if valid_loss < best_val_loss and epoch > 3:
             save_checkpoint(
-                epoch, model, optimizer, scheduler, best_model_path, f"best_valid_model_epoch{epoch+1}.pth.tar",
+                epoch, model, optimizer, scheduler, best_model_path, f"best_valid_model_epoch{epoch + 1}.pth.tar",
                 all_losses, all_results)
             best_val_loss = valid_loss
             print('Best valid model saved.')
@@ -131,7 +137,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             print(f'Best train model saved: {scheduler.get_last_lr()}')
         if test_loss < best_test_loss and epoch > 5:
             save_checkpoint(
-                epoch, model, optimizer, scheduler, best_model_path, f"best_test_epoch{epoch+1}_model.pth.tar",
+                epoch, model, optimizer, scheduler, best_model_path, f"best_test_epoch{epoch + 1}_model.pth.tar",
                 all_losses, all_results)
             best_test_loss = train_loss
             print('Best test model saved.')
@@ -139,12 +145,13 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, "last_model.pth.tar", all_losses,
                             all_results)
             print('Last model saved.')
+        writer.flush()
         pbar.close()
     return
 
 
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,
-          md_loss=None, scheduler=None):
+          md_loss=None, scheduler=None, writer=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # switch to train mode
@@ -233,6 +240,16 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             loss_total_action += float(multi_view_view_loss_action + single_view_loss_action)
             loss_total_offence_severity += float(multi_view_loss_offence_severity + single_view_loss_offence_severity)
             total_loss += 1
+            if writer is not None:
+                writer.add_scalars(
+                    f"Loss/{set_name}",
+                    {
+                        f"action - {model_name}": loss_total_action,
+                        f"offence - {model_name}": loss_total_offence_severity,
+                        f"total - {model_name}": loss_total_offence_severity + loss_total_action
+                    },
+                    epoch
+                )
 
         gc.collect()
         torch.cuda.empty_cache()
@@ -248,33 +265,32 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
 
 
 def sklearn_evaluation(dataloader,
-          model,
-          model_name="",
-          set_name="train",
-        ):
-
-    prediction_file = "sklearn_summary_multi_view_hybird_" +model_name + "_" + set_name + ".json"
+                       model,
+                       model_name="",
+                       set_name="train",
+                       ):
+    prediction_file = "sklearn_summary_multi_view_hybird_" + model_name + "_" + set_name + ".json"
 
     model.eval()
     offence_labels = ["No offence", "Offence-no card", "Offence yellow", "Offence red"]
-    action_labels = [INVERSE_EVENT_DICTIONARY["action_class"][i] for i in range(0,8)]
+    action_labels = [INVERSE_EVENT_DICTIONARY["action_class"][i] for i in range(0, 8)]
     targets_offence_severity_list = []
     targets_action_list = []
     pred_offence_list = []
     pred_action_list = []
     data = {}
     data["Set"] = set_name
-    data["model_name"] =model_name
+    data["model_name"] = model_name
 
     with torch.no_grad():
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
-            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(),1).numpy().tolist()
+            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
             targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
             mvclips = mvclips.cuda().float()
             output = model(mvclips)
             outputs_offence_severity = output['mv_collection']['offence_logits']
             outputs_action = output['mv_collection']['action_logits']
-            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(),1).numpy().tolist()
+            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
             targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
             mvclips = mvclips.cuda().float()
             output = model(mvclips)
@@ -307,7 +323,7 @@ def sklearn_evaluation(dataloader,
     print(cm_action)
 
     cr_offence = classification_report(
-        targets_offence_severity_list, pred_offence_list, target_names=offence_labels,output_dict=True
+        targets_offence_severity_list, pred_offence_list, target_names=offence_labels, output_dict=True
     )
     cr_action = classification_report(
         targets_action_list, pred_action_list, target_names=action_labels, output_dict=True)
