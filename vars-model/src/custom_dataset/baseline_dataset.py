@@ -2,7 +2,7 @@ from torch.utils.data import Dataset
 from random import random
 import torch
 import random
-from src.custom_dataset.data_loader import label2vectormerge, clips2vectormerge
+from src.custom_dataset.data_loader import label2vectormerge, clips2vectormerge, create_inverse_proportion_exp_fun_weights
 from torchvision.io.video import read_video
 
 
@@ -18,6 +18,13 @@ class MultiViewDataset(Dataset):
 
             self.weights_offence_severity = torch.div(1, self.distribution_offence_severity)
             self.weights_action = torch.div(1, self.distribution_action)
+            self.weights_inverse_exp_offence_severity = create_inverse_proportion_exp_fun_weights(
+                self.distribution_offence_severity * len(self.labels_offence_severity)
+            )
+            self.weights_inverse_exp_action = create_inverse_proportion_exp_fun_weights(
+                self.distribution_action * len(self.labels_action)
+            )
+
         else:
             self.clips = clips2vectormerge(path, split, num_views, [])
 
@@ -52,9 +59,13 @@ class MultiViewDataset(Dataset):
         print(self.length)
 
     def getDistribution(self):
-        return self.distribution_offence_severity, self.distribution_action, 
+        return self.distribution_offence_severity, self.distribution_action,
+
     def getWeights(self):
-        return self.weights_offence_severity, self.weights_action, 
+        return self.weights_offence_severity, self.weights_action,
+
+    def getExpotentialWeight(self):
+        return self.weights_inverse_exp_offence_severity,  self.weights_inverse_exp_action
 
 
     # RETURNS

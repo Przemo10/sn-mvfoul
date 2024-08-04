@@ -285,9 +285,7 @@ def sklearn_evaluation(dataloader,
         targets_offence_severity_map_list, preds_offence_map_list, labels=offence_labels
     ).tolist()
 
-    print(targets_action_list)
     print("**********")
-    print(pred_action_list)
 
     cm_action = confusion_matrix(
         targets_action_map_list, preds_action_map_list, labels=action_labels

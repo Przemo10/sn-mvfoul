@@ -4,6 +4,8 @@ import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
+from pyarrow.dataset import dataset
+
 from src.custom_dataset.baseline_dataset import MultiViewDataset
 from src.custom_trainers.train import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
@@ -99,7 +101,7 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}+_G{gamma}_Step{step_size}_mv{mv_aggregate_version}"
+    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_mv{mv_aggregate_version}"
 
     best_model_path = os.path.join(
         "models",
@@ -202,9 +204,14 @@ def main(*args):
 
         print('Dataloaders initalization ...')
 
+        if only_evaluation == 4:
+            selected_batch_size = 1
+        else:
+            selected_batch_size = batch_size
+
         # Create the dataloaders for train validation and test datasets
         train_loader = torch.utils.data.DataLoader(dataset_Train,
-            batch_size=batch_size, shuffle=False,
+            batch_size=selected_batch_size, shuffle=False,
             num_workers=max_num_worker, pin_memory=True)
 
         val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,
@@ -246,10 +253,10 @@ def main(*args):
             scheduler.load_state_dict(load['scheduler'])
             epoch_start = load['epoch']
 
-
         if weighted_loss == 'Yes':
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getWeights()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getWeights()[1].cuda())
+            print(dataset_Train.getExpotentialWeight())
+            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[0].cuda())
+            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[1].cuda())
             criterion = [criterion_offence_severity, criterion_action]
         else:
             criterion_offence_severity = nn.CrossEntropyLoss()
@@ -272,13 +279,47 @@ def main(*args):
         print(results)
 
     elif only_evaluation == 4:
+        print("Base_evaluation...")
+        print("Train  ...")
+        prediction_file = evaluation(
+            train_loader,
+            model,
+            set_name="train",
+        )
+        results = evaluate(os.path.join(path, "train", "annotations.json"), prediction_file)
+        print("TRAIN")
+        print(results)
+        print("**************************")
+        print("Valid  evaluation ...")
+        prediction_file = evaluation(
+            val_loader2,
+            model,
+            set_name="valid",
+        )
+        results = evaluate(os.path.join(path, "valid", "annotations.json"), prediction_file)
+        print("VALID")
+        print(results)
+        print("**************************")
+        print("Test evaluation ... ")
+        prediction_file = evaluation(
+            test_loader2,
+            model,
+            set_name="test",
+        )
+        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+        print("TEST")
+        print(results)
+        print("--------------------------------")
+        print("Train  sklearn evaluation ...")
         evaluation_results = sklearn_evaluation(
             train_loader, model, set_name="train", model_name = model_name,
         )
         print(evaluation_results)
+        print("Valid sklearn evaluation ...")
         evaluation_results = sklearn_evaluation(
             val_loader2, model, set_name="valid", model_name = model_name,
         )
+        print("Test sklearn evaluation ...")
         print(evaluation_results)
         evaluation_results = sklearn_evaluation(
             test_loader2, model, set_name="test", model_name = model_name,
@@ -292,6 +333,7 @@ def main(*args):
         results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
+
 
     elif only_evaluation == 1:
         prediction_file = evaluation(

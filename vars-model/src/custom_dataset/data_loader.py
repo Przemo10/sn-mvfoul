@@ -191,3 +191,10 @@ def get_ordered_random_indices(num_frames, clip_len=16):
 	else:
 		indices = np.sort(np.random.choice(num_frames, clip_len, replace=False))
 		return indices
+
+
+def create_inverse_proportion_exp_fun_weights(x_cnt: torch.tensor, alpha=6.0, bias_value=0.05, gamma=1.0):
+	# https://www.mdpi.com/2079-9292/13/15/2929
+	x_sum = torch.sum(x_cnt)
+	x_weight = bias_value + (1 - bias_value) * torch.exp(-alpha * x_cnt / x_sum)
+	return gamma * x_weight
