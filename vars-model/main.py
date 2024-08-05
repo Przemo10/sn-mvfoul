@@ -75,8 +75,9 @@ def main(*args):
         start_frame = args.start_frame
         end_frame = args.end_frame
         weight_decay = args.weight_decay
-        model_name = f"{args.model_name},_v{args.net_version}"
+        model_name = f"{args.model_name}net_v{args.net_version}"
         mv_aggregate_version = args.net_version
+        freeze_layers = args.freeze_layers
         pre_model = args.pre_model
         num_views = args.num_views
         fps = args.fps
@@ -227,7 +228,17 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-    model = MVNetwork(net_name=pre_model, agr_type=pooling_type, mv_aggregate_version=mv_aggregate_version).cuda()
+    model = MVNetwork(net_name=pre_model,
+                      agr_type=pooling_type,
+                      mv_aggregate_version=mv_aggregate_version,
+                      freeze_layers=freeze_layers).cuda()
+    count = 0
+    for name, param in model.named_parameters():
+        if count < 50:
+            print(f"{name}: {param.requires_grad}")
+            count += 1
+        else:
+            continue
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -391,6 +402,7 @@ if __name__ == '__main__':
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s", help="Name of the pretrained model")
     parser.add_argument("--net_version", required=False, type=int, default=1, help="MvAggregateModelVersion")
+    parser.add_argument("--freeze_layers", required=False, type=int, default=0, help="Freeze layers")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes", help="If the custom_loss should be weighted")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")

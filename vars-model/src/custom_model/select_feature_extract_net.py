@@ -5,6 +5,13 @@ from torchvision.models.video import swin3d_s, Swin3D_S_Weights, swin3d_t, Swin3
 from transformers import VideoMAEForVideoClassification
 
 
+FREEZE_LAYERS = {
+    "mvit_v2_s": "blocks.10",
+    "swin3d_s": "features.4",
+    "swin3d_t": "features.4",
+}
+
+
 def get_feature_network(net_name='r2plus1d_18', feat_dim = 400):
     if net_name == "r3d_18":
         weights_model = R3D_18_Weights.DEFAULT
@@ -39,4 +46,6 @@ def get_feature_network(net_name='r2plus1d_18', feat_dim = 400):
         weights_model = R2Plus1D_18_Weights.DEFAULT
         network = r2plus1d_18(weights=weights_model)
 
-    return  network, feat_dim
+    freeze_layer_name = FREEZE_LAYERS.get(net_name, "no_freeze")
+
+    return  network, feat_dim, freeze_layer_name
