@@ -1,6 +1,7 @@
 import logging
 import os
 import torch
+from tensorboard import summary
 from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
@@ -8,6 +9,40 @@ import json
 from tqdm import tqdm
 from src.soccernet_evaluate import evaluate
 from sklearn.metrics import confusion_matrix, classification_report
+import numpy as np
+
+
+def create_set_name_all_results():
+    return {
+        'accuracy_offence_severity': [],
+        'accuracy_action': [],
+        'balanced_accuracy_offence_severity': [],
+        'balanced_accuracy_action': [],
+        'leaderboard_value': []
+    }
+
+TRAINING_RESULT_DICT =  {
+    'train': create_set_name_all_results(),
+    'valid': create_set_name_all_results(),
+    'test':  create_set_name_all_results()
+}
+
+def update_epoch_results_dict(set_name,  epoch_results):
+    for key, value in epoch_results.items():
+        TRAINING_RESULT_DICT[set_name][key].append(value)
+
+def find_highest_leaderboard_index(training_result_dict, set_name):
+    leaderboard_values = training_result_dict[set_name]['leaderboard_value']
+    if not leaderboard_values:
+        return None
+    max_value = max(leaderboard_values)
+    max_index = leaderboard_values.index(max_value)
+    return max_index
+
+
+def get_best_n_metric_result(set_name, metric = 'leaderboard_value', best_n_metric=3):
+    metric_array = np.array(TRAINING_RESULT_DICT[set_name][metric])
+    return metric_array[np.argsort(metric_array)[-best_n_metric]]
 
 
 def trainer(train_loader,
@@ -29,6 +64,7 @@ def trainer(train_loader,
 
     for epoch in range(epoch_start, max_epochs):
 
+
         print(f"Epoch {epoch + 1}/{max_epochs}")
 
         # Create a progress bar
@@ -48,9 +84,9 @@ def trainer(train_loader,
             writer=writer,
         )
 
-        results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
+        train_results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
         print(f"TRAINING loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
-        print(results)
+        print(train_results)
         ###################### VALIDATION ###################
         prediction_file, loss_action, loss_offence_severity = train(
             val_loader2,
@@ -64,9 +100,10 @@ def trainer(train_loader,
             writer=writer,
         )
 
-        results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
+        valid_results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
         print(f"VALIDATION: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
-        print(results)
+        print(valid_results)
+        valid_epoch_leaderboard = valid_results["leaderboard_value"]
 
         ###################### TEST ###################
         prediction_file, loss_action, loss_offence_severity = train(
@@ -81,26 +118,66 @@ def trainer(train_loader,
             writer=writer,
         )
 
-        results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
+        test_results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
         print(f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
-        print(results)
+        print(test_results)
+        test_epoch_leaderboard = test_results["leaderboard_value"]
 
         scheduler.step()
 
-        counter += 1
+        update_epoch_results_dict("train", train_results)
+        update_epoch_results_dict("valid", valid_results)
+        update_epoch_results_dict("test", test_results)
 
-        if counter > 3:
-            state = {
-                'epoch': epoch + 1,
-                'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict()
-            }
-            path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
-            torch.save(state, path_aux)
+        if writer is not None:
+            writer.add_scalars(
+                f"Loss/train",
+                train_results,
+                epoch
+            )
+            writer.add_scalars(
+                f"Loss/valid",
+                valid_results,
+                epoch
+            )
+            writer.add_scalars(
+                f"Loss/test",
+                test_results,
+                epoch
+            )
+
+        counter += 1
+        if counter > 5:
+            saved_cond = np.logical_or(
+                get_best_n_metric_result("valid") < valid_epoch_leaderboard,
+                get_best_n_metric_result("test") < test_epoch_leaderboard
+            )
+            saved_cond = np.logical_or(
+                saved_cond,
+                epoch + 3 >= max_epochs
+            )
+            if saved_cond:
+                state = {
+                    'epoch': epoch + 1,
+                    'state_dict': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'scheduler': scheduler.state_dict(),
+                    "history": TRAINING_RESULT_DICT
+                }
+                path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
+                torch.save(state, path_aux)
 
     writer.flush()
     pbar.close()
+
+    # Finding the highest leaderboard value index for 'valid' and 'test' sets
+    highest_valid_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'valid')
+    highest_test_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'test')
+
+    print(f"Highest leaderboard value index for valid set: {highest_valid_index}")
+    print(f"Highest leaderboard value index for test set: {highest_test_index}")
+    print(f"Training result dict: {TRAINING_RESULT_DICT}")
+
     return
 
 
