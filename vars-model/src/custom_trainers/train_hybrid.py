@@ -17,10 +17,10 @@ from src.custom_trainers.training_history import update_epoch_results_dict, TRAI
 
 
 def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion, best_model_path,
-            epoch_start, model_name, path_dataset, max_epochs=100, writer=None, distil_temp=2.0, distil_lambda =1.0):
+            epoch_start, model_name, path_dataset, max_epochs=100, patience = 10, writer=None,
+            distil_temp=2.0, distil_lambda =1.0):
     logging.info("start training")
     md_loss = MutualDistillationLoss(temp=distil_temp, lambda_hyperparam=distil_lambda)
-
     counter = 0
 
     for epoch in range(epoch_start, max_epochs):
@@ -99,7 +99,7 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
         test_results_multi = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file[1])
 
         print(
-            f"VALID: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}, "
+            f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}, "
             f"loss_distil: {round(loss_mutual_distillation, 10)}")
         print(f" Single: {test_results_single},\n Multi : {test_results_multi}")
         test_epoch_leaderboard = test_results_multi["leaderboard_value"]
@@ -161,9 +161,22 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                 test_results_single,
                 epoch + 1
             )
+        # Early stopping
+        if valid_epoch_leaderboard >= np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value']):
+            patience = 10  # Reset patience counter
+        else:
+            patience -= 1
+            if patience == 0:
+                break
+    writer.flush()
+    pbar.close()
+    # Finding the highest leaderboard value index for 'valid' and 'test' sets
+    highest_valid_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'valid')
+    highest_test_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'test')
 
-        writer.flush()
-        pbar.close()
+    print(f"Highest leaderboard value index for valid set: {highest_valid_index}")
+    print(f"Highest leaderboard value index for test set: {highest_test_index}")
+    print(f"Training result dict: {TRAINING_RESULT_DICT}")
     return
 
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,

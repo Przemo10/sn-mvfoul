@@ -24,10 +24,12 @@ def trainer(train_loader,
             model_name,
             path_dataset,
             max_epochs=1000,
+            patience = 10,
             writer=None,
             ):
     logging.info("start training")
     counter = 0
+    patience_counter = patience
 
     for epoch in range(epoch_start, max_epochs):
 
@@ -133,9 +135,17 @@ def trainer(train_loader,
                 test_results,
                 epoch+1
             )
+        # Early stopping
+        if valid_epoch_leaderboard >= np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value']):
+            patience = patience_counter
+        else:
+            patience -= 1
+            if patience == 0:
+                break
 
     writer.flush()
     pbar.close()
+
 
     # Finding the highest leaderboard value index for 'valid' and 'test' sets
     highest_valid_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'valid')
@@ -195,8 +205,8 @@ def train(dataloader,
 
             if len(action) == 1:
 
-                preds_sev = torch.argmax(outputs_offence_severity, 1)  # dla video-mae
-                preds_act = torch.argmax(outputs_action, 1)
+                preds_sev = torch.argmax(outputs_offence_severity, 0)  # dla video-mae
+                preds_act = torch.argmax(outputs_action, 0)
                 # preds_sev = torch.argmax(outputs_offence_severity, 0)
                 # preds_act = torch.argmax(outputs_action,0)  # dla mvit-
 

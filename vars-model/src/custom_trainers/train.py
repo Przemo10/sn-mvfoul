@@ -25,10 +25,12 @@ def trainer(train_loader,
             model_name,
             path_dataset,
             max_epochs=1000,
+            patience = 10,
             writer=None,
             ):
     logging.info("start training")
     counter = 0
+    patience_counter = patience
 
     for epoch in range(epoch_start, max_epochs):
 
@@ -134,6 +136,13 @@ def trainer(train_loader,
                 test_results,
                 epoch+1
             )
+        # Early stopping
+        if valid_epoch_leaderboard >= np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value']):
+            patience = patience_counter
+        else:
+            patience -= 1
+            if patience == 0:
+                break
 
     writer.flush()
     pbar.close()

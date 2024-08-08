@@ -8,10 +8,15 @@ class XinMultimodalNet2(torch.nn.Module):
 
     # work based on article
 
-    def __init__(self, num_views: int,  net_name='mvit_v2_s'):
+    def __init__(self, num_views: int,  net_name='mvit_v2_s', freeze_layers=0):
         super().__init__()
 
-        self.model,  self.feat_dim = get_feature_network(net_name=net_name)
+        network, self.feat_dim, self.freeze_up_to = get_feature_network(net_name=net_name)
+
+        if freeze_layers > 0:
+            self.model = self.freezee_net_layer(network)
+        else:
+            self.model = network
         self.model.head = nn.Identity()
         self.num_views = num_views
         # self.feat_dim = 400
@@ -48,6 +53,16 @@ class XinMultimodalNet2(torch.nn.Module):
             nn.Linear(self.token_dim * num_views, 8)
         )
 
+    def freezee_net_layer(self, network):
+        freeze = True
+        for name, param in network.named_parameters():
+            if freeze:
+                param.requires_grad = False
+            if name.startswith(self.freeze_up_to):
+                freeze = False  # Stop freezing after the last parameter of blocks.10
+
+        return  network
+
     def forward(self, mvimages):
         output_dict = {'mv_collection': {}}
         B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height, Width
@@ -74,7 +89,6 @@ class XinMultimodalNet2(torch.nn.Module):
         output_dict["mv_collection"]["offence_logits"] = mv_offence
         output_dict["mv_collection"]["action_logits"] = mv_actions
         # print(x.shape)
-
         return output_dict
 
 """

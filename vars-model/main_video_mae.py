@@ -122,8 +122,9 @@ def main(*args):
     else:
         transformAug = None
 
-    dataset_Train = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='train',
-                                        num_views=num_views, transform=transformAug)
+    dataset_Train = MultiViewMAEDataset(
+        path=path, start=start_frame, end=end_frame, fps=fps, split='train',
+        num_views=num_views, transform=transformAug)
     dataset_Valid2 = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
                                          num_views=5)
     dataset_Test2 = MultiViewMAEDataset(path=path, start=start_frame, end=end_frame, fps=fps, split='test', num_views=5)
@@ -146,7 +147,7 @@ def main(*args):
                                                num_workers=max_num_worker, pin_memory=True)
 
     print('Dataloaders initalization - finished')
-    model = VideoMAENetwork()
+    model = VideoMAENetwork(agr_type=pooling_type).cuda()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -219,6 +220,7 @@ if __name__ == '__main__':
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="No", help="Data augmentation")
+    parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="video_mae",
                         help="Name of the pretrained model")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean",

@@ -23,11 +23,14 @@ class WeightedAggregate(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, mvimages, aux=None):
-        if mvimages:
+        if not aux:
             B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height, Width
             aux = self.lifting_net(
                 unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True)
             )
+        else:
+            aux = mvimages
+            B, V, _ = aux.shape
 
         ##################### VIEW ATTENTION #####################
 
@@ -67,11 +70,13 @@ class ViewMaxAggregate(nn.Module):
         self.lifting_net = lifting_net
 
     def forward(self, mvimages, aux=None):
-        if mvimages:
+        if not aux:
             B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height, Width
             aux = self.lifting_net(
                 unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True)
             )
+        else:
+            aux = mvimages
         pooled_view = torch.max(aux, dim=1)[0]
         return pooled_view.squeeze(), aux
 
@@ -83,11 +88,13 @@ class ViewAvgAggregate(nn.Module):
         self.lifting_net = lifting_net
 
     def forward(self, mvimages, aux=None):
-        if mvimages:
+        if not aux:
             B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height, Width
             aux = self.lifting_net(
                 unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True)
             )
+        else:
+            aux = mvimages
         pooled_view = torch.mean(aux, dim=1)
         return pooled_view.squeeze(), aux
 
@@ -105,11 +112,13 @@ class ViewMaxMeanAlphaAggregate(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, mvimages, aux=None):
-        if mvimages:
+        if not aux:
             B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height, Width
             aux = self.lifting_net(
                 unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True)
             )
+        else:
+            aux = mvimages
         max_pool = torch.max(aux, dim=1)[0]
         mean_pool = torch.mean(aux, dim=1)
         pooled_view = self.alpha * mean_pool + self.beta * max_pool
@@ -133,11 +142,13 @@ class ViewMaxMeanWeightAggregate(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, mvimages, aux=None):
-        if mvimages:
+        if not aux:
             B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height, Width
             aux = self.lifting_net(
                 unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True)
             )
+        else:
+            aux = mvimages
         max_pool = torch.max(aux, dim=1)[0]
         mean_pool = torch.mean(aux, dim=1)
         pooled_view = 0.5 * torch.mul(self.max_pool_weight, max_pool) + 0.5 * torch.mul(self.mean_pool_weight,
