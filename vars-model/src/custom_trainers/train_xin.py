@@ -1,45 +1,38 @@
 import os
 import torch
-from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
 from src.soccernet_evaluate import evaluate
 from tqdm import tqdm
-import einops
-from src.custom_loss.mutulal_distilation_loss import MutualDistillationLoss
 import logging
 from config.label_map import OFFENCE_SEVERITY_MAP
 from sklearn.metrics import confusion_matrix, classification_report
+from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
+from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
+import numpy as np
 
 
-def save_checkpoint(epoch, model, optimizer, scheduler, path, filename, losses, results):
-    state = {
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'scheduler': scheduler.state_dict(),
-        'losses': losses,
-        'results': results
-    }
-    torch.save(state, os.path.join(path, filename))
-
-
-def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion, best_model_path,
-            epoch_start, model_name, path_dataset, max_epochs=1000):
+def trainer(train_loader,
+            val_loader2,
+            test_loader2,
+            model,
+            optimizer,
+            scheduler,
+            criterion,
+            best_model_path,
+            epoch_start,
+            model_name,
+            path_dataset,
+            max_epochs=1000,
+            writer=None,
+            ):
     logging.info("start training")
-
-    best_val_loss = float('inf')
-    best_train_loss = float('inf')
-    best_test_loss = float('inf')
-
-    all_losses = {'train': [], 'valid': [], 'test': []}
-    all_results = {'train_single0': [], 'train_multi': [], 'valid_single': [], 'valid_multi': [], 'test_single': [],
-                   'test_multi': []}
-
-    writer = SummaryWriter()
+    counter = 0
 
     for epoch in range(epoch_start, max_epochs):
+
+
         print(f"Epoch {epoch + 1}/{max_epochs}")
 
         # Create a progress bar
@@ -56,20 +49,12 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             train=True,
             set_name="train",
             pbar=pbar,
-            scheduler=scheduler,
             writer=writer,
         )
-        train_loss = loss_offence_severity + loss_action
 
-        results_multi = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
-
-        all_losses['train'].append(train_loss)
-        all_results['train_multi'].append(results_multi)
-
-        print(
-            f"TRAINING: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}")
-        print(f" Multi : {results_multi}")
-
+        train_results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
+        print(f"TRAINING loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
+        print(train_results)
         ###################### VALIDATION ###################
         prediction_file, loss_action, loss_offence_severity = train(
             val_loader2,
@@ -80,22 +65,17 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             model_name,
             train=False,
             set_name="valid",
-            scheduler=scheduler,
             writer=writer,
         )
-        valid_loss = loss_offence_severity + loss_action
-        results_multi = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
 
-        all_losses['valid'].append(valid_loss)
-        all_results['valid_multi'].append(results_multi)
+        valid_results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
+        print(f"VALIDATION: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
+        print(valid_results)
+        valid_epoch_leaderboard = valid_results["leaderboard_value"]
 
-        print(
-            f"VALID: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}")
-        print(f" Multi : {results_multi}")
-
-        #### TEST################################################################3
+        ###################### TEST ###################
         prediction_file, loss_action, loss_offence_severity = train(
-            val_loader2,
+            test_loader2,
             model,
             criterion,
             optimizer,
@@ -103,50 +83,69 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
             model_name,
             train=False,
             set_name="test",
-            scheduler=scheduler,
             writer=writer,
         )
-        test_loss = loss_offence_severity + loss_action
-        results_multi = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
 
-        all_losses['test'].append(test_loss)
-        all_results['test_multi'].append(results_multi)
-
-        print(
-            f"Test loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}")
-        print(f" Multi : {results_multi}")
+        test_results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
+        print(f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
+        print(test_results)
+        test_epoch_leaderboard = test_results["leaderboard_value"]
 
         scheduler.step()
 
-        if valid_loss < best_val_loss and epoch > 3:
-            save_checkpoint(
-                epoch, model, optimizer, scheduler, best_model_path, f"best_valid_model_epoch{epoch + 1}.pth.tar",
-                all_losses, all_results)
-            best_val_loss = valid_loss
-            print('Best valid model saved.')
-        elif (epoch % 10 == 0) and epoch > 5:
-            save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, f"epoch{epoch + 1}_model.pth.tar",
-                            all_losses,
-                            all_results)
-            print('saved epoch model ')
-        if train_loss < best_train_loss:
-            save_checkpoint(
-                epoch, model, optimizer, scheduler, best_model_path, "best_train_model.pth.tar",
-                all_losses, all_results)
-            best_train_loss = train_loss
-            print(f'Best train model saved: {scheduler.get_last_lr()}')
-        if test_loss < best_test_loss and epoch > 5:
-            save_checkpoint(
-                epoch, model, optimizer, scheduler, best_model_path, f"best_test_epoch{epoch + 1}_model.pth.tar",
-                all_losses, all_results)
-            best_test_loss = train_loss
-            print('Best test model saved.')
-        if epoch >= max_epochs - 3:
-            save_checkpoint(epoch, model, optimizer, scheduler, best_model_path, "last_model.pth.tar", all_losses,
-                            all_results)
-            print('Last model saved.')
-        writer.flush()
-        pbar.close()
+        update_epoch_results_dict("train", train_results)
+        update_epoch_results_dict("valid", valid_results)
+        update_epoch_results_dict("test", test_results)
+
+        counter += 1
+        if counter > 5:
+            saved_cond = np.logical_or(
+                get_best_n_metric_result("valid") < valid_epoch_leaderboard,
+                get_best_n_metric_result("test") < test_epoch_leaderboard
+            )
+            saved_cond = np.logical_or(
+                saved_cond,
+                epoch + 3 >= max_epochs
+            )
+            if saved_cond:
+                state = {
+                    'epoch': epoch + 1,
+                    'state_dict': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'scheduler': scheduler.state_dict(),
+                    "history": TRAINING_RESULT_DICT
+                }
+                path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
+                torch.save(state, path_aux)
+
+        if writer is not None:
+            writer.add_scalars(
+                f"Metric/train",
+                train_results,
+                epoch+1
+            )
+            writer.add_scalars(
+                f"Metric/valid",
+                valid_results,
+                epoch+1
+            )
+            writer.add_scalars(
+                f"Metric/test",
+                test_results,
+                epoch+1
+            )
+
+    writer.flush()
+    pbar.close()
+
+    # Finding the highest leaderboard value index for 'valid' and 'test' sets
+    highest_valid_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'valid')
+    highest_test_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'test')
+
+    print(f"Highest leaderboard value index for valid set: {highest_valid_index}")
+    print(f"Highest leaderboard value index for test set: {highest_test_index}")
+    print(f"Training result dict: {TRAINING_RESULT_DICT}")
+
     return
 
 

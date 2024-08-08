@@ -5,7 +5,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
 from pyarrow.dataset import dataset
-
+from torch.utils.tensorboard import SummaryWriter
 from src.custom_dataset.baseline_dataset import MultiViewDataset
 from src.custom_trainers.train import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
@@ -378,8 +378,12 @@ def main(*args):
         print("CHALL")
         print(results)
     else:
+        run_label = model_output_dirname.replace("/","_")
+        writer = SummaryWriter(f"runs/{model_name} {run_label}")
         trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion, 
-                best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs)
+                best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
+                writer=writer)
+        writer.close()
         
     return 0
 

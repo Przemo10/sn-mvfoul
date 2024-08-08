@@ -9,7 +9,7 @@ import torch.nn as nn
 import torchvision.transforms as transforms
 from src.custom_model.video_mae import VideoMAENetwork
 from src.custom_dataset.video_mae_dataset import MultiViewMAEDataset
-
+from torch.utils.tensorboard import SummaryWriter
 
 
 def checkArguments():
@@ -92,24 +92,15 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    os.makedirs(os.path.join("models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model,
-                                                                                                          os.path.join(
-                                                                                                              str(LR),
-                                                                                                              "_B" + str(
-                                                                                                                  batch_size) + "_F" + str(
-                                                                                                                  number_of_frames) + "_S" + "_G" + str(
-                                                                                                                  gamma) + "_Step" + str(
-                                                                                                                  step_size)))))),
-                exist_ok=True)
+    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}+_G{gamma}_Step{step_size}_atten{pooling_type}"
 
-    best_model_path = os.path.join("models", os.path.join(model_name, os.path.join(str(num_views),
-                                                                                   os.path.join(pre_model,
-                                                                                                os.path.join(str(LR),
-                                                                                                             "_B" + str(
-                                                                                                                 batch_size) + "_F" + str(
-                                                                                                                 number_of_frames) + "_S" + "_G" + str(
-                                                                                                                 gamma) + "_Step" + str(
-                                                                                                                 step_size))))))
+    best_model_path = os.path.join(
+        "models",
+        os.path.join(model_name,
+                     os.path.join(str(num_views), os.path.join(pre_model, os.path.join(model_output_dirname)))
+                     )
+    )
+    os.makedirs(best_model_path, exist_ok=True)
 
     log_path = os.path.join(best_model_path, "logging.log")
 
@@ -202,8 +193,14 @@ def main(*args):
     elif only_evaluation == 2:
         pass
     else:
-        trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
-                best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs)
+        run_label = model_output_dirname.replace("/", "_")
+        writer = SummaryWriter(f"runs/{model_name} {run_label}")
+        trainer(
+            train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
+            best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
+            writer=writer
+
+        )
 
     return 0
 

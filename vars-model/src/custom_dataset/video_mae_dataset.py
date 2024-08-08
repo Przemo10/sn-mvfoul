@@ -3,6 +3,7 @@ from random import random
 import torch
 import random
 from src.custom_dataset.data_loader import label2vectormerge, clips2vectormerge,  get_ordered_random_indices
+from src.custom_dataset.data_loader import  create_inverse_proportion_exp_fun_weights
 import numpy as np
 import cv2
 import warnings
@@ -11,7 +12,7 @@ warnings.filterwarnings("ignore", message=".*list of numpy.ndarrays is extremely
 from transformers import AutoImageProcessor
 
 class MultiViewMAEDataset(Dataset):
-    def __init__(self, path, start, end, fps, split, num_views, transform=None):
+    def __init__(self, path, start, end, fps, split, num_views, transform=None, **kwargs):
 
         if split != 'chall':
             # To load the annotations
@@ -25,6 +26,20 @@ class MultiViewMAEDataset(Dataset):
 
             self.weights_offence_severity = torch.div(1, self.distribution_offence_severity)
             self.weights_action = torch.div(1, self.distribution_action)
+            self.weights_inverse_exp_offence_severity = create_inverse_proportion_exp_fun_weights(
+                self.distribution_offence_severity * len(self.labels_offence_severity),
+                alpha=kwargs.get('weight_exp_offence_alpha', 5.0),
+                bias_value=kwargs.get('weight_exp_offence_alpha', 0.1),
+                gamma=kwargs.get('weight_exp_offence_gamma', 1.0),
+            )
+            self.weights_inverse_exp_action = create_inverse_proportion_exp_fun_weights(
+                self.distribution_action * len(self.labels_action),
+                alpha=kwargs.get('weight_exp_action_alpha', 3.0),
+                bias_value=kwargs.get('weight_exp_action_alpha', 0.1),
+                gamma=kwargs.get('weight_exp_action_gamma', 1.0),
+            )
+
+            self.video_shift_aug = kwargs.get('video_shift_aug', 0)
         else:
             self.clips = clips2vectormerge(path, split, num_views, [])
 
@@ -50,7 +65,7 @@ class MultiViewMAEDataset(Dataset):
         self.end = end
         self.transform = transform
         self.crop_margin = True
-        self.transform_model =  AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        self.transform_model = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
         self.num_views = num_views
         self.model_frames = 16
         self.fps = fps
@@ -118,6 +133,12 @@ class MultiViewMAEDataset(Dataset):
             if self.fps != 16:
                 indices = get_ordered_random_indices(self.fps)
                 final_frames = video_np[indices, :, :, :]
+
+            elif self.split == 'train' and self.video_shift_aug > 0:
+                rand_shift = random.randint(-self.video_shift_aug, 2)
+                start = self.start + rand_shift
+                end = self.end + rand_shift
+                final_frames = video_np[start:end, :, :, :]
             else:
                 final_frames = video_np[self.start:self.end, :, :, :]
             if self.crop_margin:

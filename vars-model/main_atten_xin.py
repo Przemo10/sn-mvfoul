@@ -5,7 +5,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
 from torch.nn.functional import prelu
-
+from torch.utils.tensorboard import SummaryWriter
 from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
 from src.custom_trainers.train_xin import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
@@ -99,13 +99,12 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-
-    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}+_G{gamma}_Step{step_size}_mv{mv_aggregate_version}"
+    output_dir_name = f"{LR}/B_{batch_size}F{number_of_frames}+_G{gamma}_S{step_size}_mv{net_version}_p{pooling_type}"
 
     best_model_path = os.path.join(
         "models",
         os.path.join(model_name,
-                     os.path.join(str(num_views), os.path.join(pre_model, os.path.join(model_output_dirname)))
+                     os.path.join(str(num_views), os.path.join(pre_model, os.path.join(output_dir_name)))
                      )
     )
     os.makedirs(best_model_path, exist_ok=True)
@@ -237,8 +236,14 @@ def main(*args):
             criterion_action = nn.CrossEntropyLoss()
             criterion = [criterion_offence_severity, criterion_action]
 
-        trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
-                best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs)
+        run_label = output_dir_name.replace("/","_")
+        writer = SummaryWriter(f"runs/{model_name} {run_label}")
+
+        trainer(
+            train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
+            best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
+            writer=writer
+        )
 
     if only_evaluation == 0:
         print("Only evaluation 0")

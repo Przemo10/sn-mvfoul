@@ -7,6 +7,9 @@ import json
 from tqdm import tqdm
 from src.soccernet_evaluate import evaluate
 from config.label_map import OFFENCE_SEVERITY_MAP
+from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
+from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
+import  numpy as np
 
 
 def trainer(train_loader,
@@ -20,12 +23,14 @@ def trainer(train_loader,
             epoch_start,
             model_name,
             path_dataset,
-            max_epochs=1000
+            max_epochs=1000,
+            writer=None,
             ):
     logging.info("start training")
     counter = 0
 
     for epoch in range(epoch_start, max_epochs):
+
 
         print(f"Epoch {epoch + 1}/{max_epochs}")
 
@@ -43,11 +48,12 @@ def trainer(train_loader,
             train=True,
             set_name="train",
             pbar=pbar,
+            writer=writer,
         )
 
-        results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
+        train_results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
         print(f"TRAINING loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
-        print(results)
+        print(train_results)
         ###################### VALIDATION ###################
         prediction_file, loss_action, loss_offence_severity = train(
             val_loader2,
@@ -57,12 +63,14 @@ def trainer(train_loader,
             epoch + 1,
             model_name,
             train=False,
-            set_name="valid"
+            set_name="valid",
+            writer=writer,
         )
 
-        results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
+        valid_results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
         print(f"VALIDATION: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
-        print(results)
+        print(valid_results)
+        valid_epoch_leaderboard = valid_results["leaderboard_value"]
 
         ###################### TEST ###################
         prediction_file, loss_action, loss_offence_severity = train(
@@ -74,27 +82,69 @@ def trainer(train_loader,
             model_name,
             train=False,
             set_name="test",
+            writer=writer,
         )
 
-        results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
+        test_results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
         print(f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
-        print(results)
+        print(test_results)
+        test_epoch_leaderboard = test_results["leaderboard_value"]
 
         scheduler.step()
 
+        update_epoch_results_dict("train", train_results)
+        update_epoch_results_dict("valid", valid_results)
+        update_epoch_results_dict("test", test_results)
+
         counter += 1
+        if counter > 5:
+            saved_cond = np.logical_or(
+                get_best_n_metric_result("valid") < valid_epoch_leaderboard,
+                get_best_n_metric_result("test") < test_epoch_leaderboard
+            )
+            saved_cond = np.logical_or(
+                saved_cond,
+                epoch + 3 >= max_epochs
+            )
+            if saved_cond:
+                state = {
+                    'epoch': epoch + 1,
+                    'state_dict': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'scheduler': scheduler.state_dict(),
+                    "history": TRAINING_RESULT_DICT
+                }
+                path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
+                torch.save(state, path_aux)
 
-        if counter > 3:
-            state = {
-                'epoch': epoch + 1,
-                'state_dict': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict()
-            }
-            path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
-            torch.save(state, path_aux)
+        if writer is not None:
+            writer.add_scalars(
+                f"Metric/train",
+                train_results,
+                epoch+1
+            )
+            writer.add_scalars(
+                f"Metric/valid",
+                valid_results,
+                epoch+1
+            )
+            writer.add_scalars(
+                f"Metric/test",
+                test_results,
+                epoch+1
+            )
 
+    writer.flush()
     pbar.close()
+
+    # Finding the highest leaderboard value index for 'valid' and 'test' sets
+    highest_valid_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'valid')
+    highest_test_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'test')
+
+    print(f"Highest leaderboard value index for valid set: {highest_valid_index}")
+    print(f"Highest leaderboard value index for test set: {highest_test_index}")
+    print(f"Training result dict: {TRAINING_RESULT_DICT}")
+
     return
 
 
@@ -107,6 +157,7 @@ def train(dataloader,
           train=False,
           set_name="train",
           pbar=None,
+          writer=None,
           ):
     # switch to train mode
     if train:
@@ -122,37 +173,69 @@ def train(dataloader,
         os.mkdir(model_name)
 
         # path where we will save the results
-    prediction_file = "predicitions_" + set_name + "_epoch_" + str(epoch) + ".json"
+    prediction_file = f"predicitions_{set_name}_epoch_{epoch}.json"
+
     data = {}
     data["Set"] = set_name
 
     actions = {}
 
-    if torch.set_grad_enabled(train):
+    with torch.set_grad_enabled(train):
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
 
-            targets_offence_severity = targets_offence_severity
-            targets_action = targets_action
-            mvclips = mvclips.float()
+            targets_offence_severity = targets_offence_severity.cuda()
+            targets_action = targets_action.cuda()
+            mvclips = mvclips.cuda().float()
 
             if pbar is not None:
                 pbar.update()
 
             # compute output
             outputs_offence_severity, outputs_action, _ = model(mvclips)
-            for i in range(len(action)):
-                if len(action) == 1:
-                    dim_idx = 0
-                else:
-                    dim_idx = 1
-                values = {
-                    "Action class": INVERSE_EVENT_DICTIONARY["action_class"][
-                        torch.argmax(outputs_action.detach().cpu(), dim=dim_idx)[i].item()]
-                }
-                preds_sev = torch.argmax(outputs_offence_severity.detach().cpu(), dim=dim_idx)
-                offence, severity = OFFENCE_SEVERITY_MAP[preds_sev[i].item()]
-                values["Offence"] = offence
-                values["Severity"] = severity
+
+            if len(action) == 1:
+
+                preds_sev = torch.argmax(outputs_offence_severity, 1)  # dla video-mae
+                preds_act = torch.argmax(outputs_action, 1)
+                # preds_sev = torch.argmax(outputs_offence_severity, 0)
+                # preds_act = torch.argmax(outputs_action,0)  # dla mvit-
+
+                values = {}
+                values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
+                if preds_sev.item() == 0:
+                    values["Offence"] = "No offence"
+                    values["Severity"] = ""
+                elif preds_sev.item() == 1:
+                    values["Offence"] = "Offence"
+                    values["Severity"] = "1.0"
+                elif preds_sev.item() == 2:
+                    values["Offence"] = "Offence"
+                    values["Severity"] = "3.0"
+                elif preds_sev.item() == 3:
+                    values["Offence"] = "Offence"
+                    values["Severity"] = "5.0"
+                actions[action[0]] = values
+            else:
+
+                preds_sev = torch.argmax(outputs_offence_severity.detach().cpu(), 1)
+                preds_act = torch.argmax(outputs_action.detach().cpu(), 1)
+
+                for i in range(len(action)):
+                    values = {}
+                    values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act[i].item()]
+                    if preds_sev[i].item() == 0:
+                        values["Offence"] = "No offence"
+                        values["Severity"] = ""
+                    elif preds_sev[i].item() == 1:
+                        values["Offence"] = "Offence"
+                        values["Severity"] = "1.0"
+                    elif preds_sev[i].item() == 2:
+                        values["Offence"] = "Offence"
+                        values["Severity"] = "3.0"
+                    elif preds_sev[i].item() == 3:
+                        values["Offence"] = "Offence"
+                        values["Severity"] = "5.0"
+                    actions[action[i]] = values
 
             if len(outputs_offence_severity.size()) == 1:
                 outputs_offence_severity = outputs_offence_severity.unsqueeze(0)
@@ -169,12 +252,22 @@ def train(dataloader,
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=100.0)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             loss_total_action += float(loss_action)
             loss_total_offence_severity += float(loss_offence_severity)
             total_loss += 1
+            if writer is not None:
+                writer.add_scalars(
+                    f"Loss/{set_name}",
+                    {
+                        f"action - {model_name}": loss_total_action,
+                        f"offence - {model_name}": loss_total_offence_severity,
+                        f"total - {model_name}": loss_total_offence_severity + loss_total_action
+                    },
+                    epoch + 1
+                )
 
         gc.collect()
         torch.cuda.empty_cache()

@@ -10,40 +10,8 @@ from tqdm import tqdm
 from src.soccernet_evaluate import evaluate
 from sklearn.metrics import confusion_matrix, classification_report
 import numpy as np
-
-
-def create_set_name_all_results():
-    return {
-        'accuracy_offence_severity': [],
-        'accuracy_action': [],
-        'balanced_accuracy_offence_severity': [],
-        'balanced_accuracy_action': [],
-        'leaderboard_value': []
-    }
-
-TRAINING_RESULT_DICT =  {
-    'train': create_set_name_all_results(),
-    'valid': create_set_name_all_results(),
-    'test':  create_set_name_all_results()
-}
-
-def update_epoch_results_dict(set_name,  epoch_results):
-    for key, value in epoch_results.items():
-        TRAINING_RESULT_DICT[set_name][key].append(value)
-
-def find_highest_leaderboard_index(training_result_dict, set_name):
-    leaderboard_values = training_result_dict[set_name]['leaderboard_value']
-    if not leaderboard_values:
-        return None
-    max_value = max(leaderboard_values)
-    max_index = leaderboard_values.index(max_value)
-    return max_index
-
-
-def get_best_n_metric_result(set_name, metric = 'leaderboard_value', best_n_metric=3):
-    metric_array = np.array(TRAINING_RESULT_DICT[set_name][metric])
-    return metric_array[np.argsort(metric_array)[-best_n_metric]]
-
+from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
+from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
 
 def trainer(train_loader,
             val_loader2,
@@ -56,11 +24,11 @@ def trainer(train_loader,
             epoch_start,
             model_name,
             path_dataset,
-            max_epochs=1000
+            max_epochs=1000,
+            writer=None,
             ):
     logging.info("start training")
     counter = 0
-    writer = SummaryWriter()
 
     for epoch in range(epoch_start, max_epochs):
 
@@ -129,23 +97,6 @@ def trainer(train_loader,
         update_epoch_results_dict("valid", valid_results)
         update_epoch_results_dict("test", test_results)
 
-        if writer is not None:
-            writer.add_scalars(
-                f"Loss/train",
-                train_results,
-                epoch
-            )
-            writer.add_scalars(
-                f"Loss/valid",
-                valid_results,
-                epoch
-            )
-            writer.add_scalars(
-                f"Loss/test",
-                test_results,
-                epoch
-            )
-
         counter += 1
         if counter > 5:
             saved_cond = np.logical_or(
@@ -166,6 +117,23 @@ def trainer(train_loader,
                 }
                 path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
                 torch.save(state, path_aux)
+
+        if writer is not None:
+            writer.add_scalars(
+                f"Metric/train",
+                train_results,
+                epoch+1
+            )
+            writer.add_scalars(
+                f"Metric/valid",
+                valid_results,
+                epoch+1
+            )
+            writer.add_scalars(
+                f"Metric/test",
+                test_results,
+                epoch+1
+            )
 
     writer.flush()
     pbar.close()
@@ -299,7 +267,7 @@ def train(dataloader,
                         f"offence - {model_name}": loss_total_offence_severity,
                         f"total - {model_name}": loss_total_offence_severity + loss_total_action
                     },
-                    epoch
+                    epoch + 1
                 )
 
         gc.collect()

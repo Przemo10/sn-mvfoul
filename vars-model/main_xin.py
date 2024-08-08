@@ -5,7 +5,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
 from torch.nn.functional import prelu
-
+from torch.utils.tensorboard import SummaryWriter
 from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
 from src.custom_trainers.train_xin import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
@@ -237,8 +237,11 @@ def main(*args):
             criterion_action = nn.CrossEntropyLoss()
             criterion = [criterion_offence_severity, criterion_action]
 
+        run_label = model_output_dirname.replace("/", "_")
+        writer = SummaryWriter(f"runs/{model_name} {run_label}")
         trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
-                best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs)
+                best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
+                writer=writer)
 
     if only_evaluation == 0:
         print("Only evaluation 0")

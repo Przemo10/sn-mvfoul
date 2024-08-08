@@ -3,7 +3,7 @@ from six import print_
 from src.utils import batch_tensor, unbatch_tensor
 import torch
 from torch import nn
-
+from src.custom_model.pooling_attention import select_pooling_attention
 
 class WeightedAggregate(nn.Module):
     def __init__(self,  model, feat_dim, lifting_net=nn.Sequential()):
@@ -24,8 +24,6 @@ class WeightedAggregate(nn.Module):
 
         self.relu = nn.ReLU()
    
-
-
     def forward(self, mvimages):
         B, V, C, D, H, W = mvimages.shape # Batch, Views, Channel, Depth, Height, Width
         aux = self.lifting_net(unbatch_tensor(self.model(batch_tensor(mvimages, dim=1, squeeze=True)), B, dim=1, unsqueeze=True))
@@ -159,16 +157,11 @@ class MVAggregate(nn.Module):
             nn.Linear(feat_dim, 8)
         )
 
-        if self.agr_type == "max":
-            self.aggregation_model = ViewMaxAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "mean":
-            self.aggregation_model = ViewAvgAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "max_mean_alpha":
-            self.aggregation_model = ViewMaxMeanAlphaAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "max_mean_weight":
-            self.aggregation_model = ViewMaxMeanWeightAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
-        else:
-            self.aggregation_model = WeightedAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+        self.aggregation_model = select_pooling_attention(
+            agr_type=agr_type,
+            model=model,
+            lifting_net=lifting_net,
+            feat_dim=feat_dim)
 
     def forward(self, mvimages):
 
@@ -201,16 +194,12 @@ class MVAggregate2(nn.Module):
             nn.Linear(feat_dim, 8)
         )
 
-        if self.agr_type == "max":
-            self.aggregation_model = ViewMaxAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "mean":
-            self.aggregation_model = ViewAvgAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "max_mean_alpha":
-            self.aggregation_model = ViewMaxMeanAlphaAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "max_mean_weight":
-            self.aggregation_model = ViewMaxMeanWeightAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
-        else:
-            self.aggregation_model = WeightedAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+        self.aggregation_model = select_pooling_attention(
+            agr_type=agr_type,
+            model=model,
+            lifting_net=lifting_net,
+            feat_dim=feat_dim
+        )
 
     def forward(self, mvimages):
 
@@ -243,16 +232,12 @@ class MVAggregate2(nn.Module):
             nn.Linear(feat_dim, 8)
         )
 
-        if self.agr_type == "max":
-            self.aggregation_model = ViewMaxAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "mean":
-            self.aggregation_model = ViewAvgAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "max_mean_alpha":
-            self.aggregation_model = ViewMaxMeanAlphaAggregate(model=model, lifting_net=lifting_net)
-        elif self.agr_type == "max_mean_weight":
-            self.aggregation_model = ViewMaxMeanWeightAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
-        else:
-            self.aggregation_model = WeightedAggregate(model=model, feat_dim=feat_dim, lifting_net=lifting_net)
+        self.aggregation_model = select_pooling_attention(
+            agr_type=agr_type,
+            model=model,
+            lifting_net=lifting_net,
+            feat_dim=feat_dim
+        )
 
     def forward(self, mvimages):
 
