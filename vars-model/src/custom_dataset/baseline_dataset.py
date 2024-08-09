@@ -8,14 +8,14 @@ from torchvision.io.video import read_video
 
 class MultiViewDataset(Dataset):
     def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None,
-                 video_shift_aug=0, **kwargs,
+                 video_shift_aug=0, weight_exp_alpha = 8.0, weight_exp_bias = 0.02, weight_exp_gamma =2.0, crop25 =0
                  ):
 
         if split != 'chall':
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity,self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
-            self.clips = self.clips[:10]
+            # self.clips = self.clips[:10]
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity, len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
 
@@ -23,15 +23,15 @@ class MultiViewDataset(Dataset):
             self.weights_action = torch.div(1, self.distribution_action)
             self.weights_inverse_exp_offence_severity = create_inverse_proportion_exp_fun_weights(
                 self.distribution_offence_severity * len(self.labels_offence_severity),
-                alpha=kwargs.get('weight_exp_offence_alpha', 5.0),
-                bias_value=kwargs.get('weight_exp_offence_alpha', 0.1),
-                gamma=kwargs.get('weight_exp_offence_gamma', 1.0),
+                alpha=weight_exp_alpha,
+                bias_value=weight_exp_bias,
+                gamma=weight_exp_gamma
             )
             self.weights_inverse_exp_action = create_inverse_proportion_exp_fun_weights(
                 self.distribution_action * len(self.labels_action),
-                alpha=kwargs.get('weight_exp_action_alpha', 3.0),
-                bias_value=kwargs.get('weight_exp_action_alpha', 0.1),
-                gamma=kwargs.get('weight_exp_action_gamma', 1.0),
+                alpha=weight_exp_alpha,
+                bias_value=weight_exp_bias,
+                gamma=weight_exp_gamma
             )
 
         else:
@@ -65,6 +65,7 @@ class MultiViewDataset(Dataset):
 
         self.length = len(self.clips)
         self.video_shift_aug = video_shift_aug
+        self.crop25 = crop25
         print(self.length)
 
     def getDistribution(self):

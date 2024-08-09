@@ -11,6 +11,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
 from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
 import numpy as np
+from src.custom_trainers.training_history import save_training_history, get_leaderboard_summary
 
 
 def trainer(train_loader,
@@ -33,7 +34,6 @@ def trainer(train_loader,
     patience_counter = patience
 
     for epoch in range(epoch_start, max_epochs):
-
 
         print(f"Epoch {epoch + 1}/{max_epochs}")
 
@@ -95,6 +95,23 @@ def trainer(train_loader,
 
         scheduler.step()
 
+        if writer is not None:
+            writer.add_scalars(
+                f"Metric/train",
+                train_results,
+                epoch + 1
+            )
+            writer.add_scalars(
+                f"Metric/valid",
+                valid_results,
+                epoch + 1
+            )
+            writer.add_scalars(
+                f"Metric/test",
+                test_results,
+                epoch + 1
+            )
+
         update_epoch_results_dict("train", train_results)
         update_epoch_results_dict("valid", valid_results)
         update_epoch_results_dict("test", test_results)
@@ -119,36 +136,17 @@ def trainer(train_loader,
                 }
                 path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
                 torch.save(state, path_aux)
-
-        if writer is not None:
-            writer.add_scalars(
-                f"Metric/train",
-                train_results,
-                epoch+1
-            )
-            writer.add_scalars(
-                f"Metric/valid",
-                valid_results,
-                epoch+1
-            )
-            writer.add_scalars(
-                f"Metric/test",
-                test_results,
-                epoch+1
-            )
-
-
-        # Early stopping
-        if valid_epoch_leaderboard >= np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value']):
-            patience = patience_counter
-        else:
-            patience -= 1
-            if patience == 0:
-                break
+                save_training_history(best_model_path)
+            # Early stopping
+            if valid_epoch_leaderboard > np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value'][:-1]):
+                patience = patience_counter
+            else:
+                patience -= 1
+                if patience == 0:
+                    break
 
     writer.flush()
     pbar.close()
-
 
     # Finding the highest leaderboard value index for 'valid' and 'test' sets
     highest_valid_index = find_highest_leaderboard_index(TRAINING_RESULT_DICT, 'valid')
@@ -158,7 +156,10 @@ def trainer(train_loader,
     print(f"Highest leaderboard value index for test set: {highest_test_index}")
     print(f"Training result dict: {TRAINING_RESULT_DICT}")
 
-    return
+    leaderboard_summary = get_leaderboard_summary(highest_valid_index, highest_test_index)
+    print(leaderboard_summary)
+
+    return leaderboard_summary
 
 
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,
@@ -267,8 +268,6 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
 
     with open(os.path.join(model_name, multi_view_prediction_file), 'w') as f:
         json.dump(multi_view_data, f, indent=4)
-    print(loss_total_offence_severity, loss_total_action, loss_total_offence_severity / total_loss,
-          loss_total_action / total_loss)
     return (os.path.join(model_name, multi_view_prediction_file),
             loss_total_action / total_loss,
             loss_total_offence_severity / total_loss

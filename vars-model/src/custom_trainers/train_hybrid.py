@@ -1,6 +1,6 @@
 import os
 import torch
-from torch.utils.tensorboard import SummaryWriter
+from src.custom_trainers.training_history import save_training_history
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
@@ -14,7 +14,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 import numpy as np
 from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
 from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
-
+from src.custom_trainers.training_history import save_training_history, get_leaderboard_summary
 
 def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion, best_model_path,
             epoch_start, model_name, path_dataset, max_epochs=100, patience = 10, writer=None,
@@ -106,30 +106,6 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
 
         scheduler.step()
 
-        update_epoch_results_dict("train", train_results_multi)
-        update_epoch_results_dict("valid", valid_results_multi)
-        update_epoch_results_dict("test", test_results_multi)
-
-        counter += 1
-        if counter > 5:
-            saved_cond = np.logical_or(
-                get_best_n_metric_result("valid") < valid_epoch_leaderboard,
-                get_best_n_metric_result("test") < test_epoch_leaderboard
-            )
-            saved_cond = np.logical_or(
-                saved_cond,
-                epoch + 3 >= max_epochs
-            )
-            if saved_cond:
-                state = {
-                    'epoch': epoch + 1,
-                    'state_dict': model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    "history": TRAINING_RESULT_DICT
-                }
-                path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
-                torch.save(state, path_aux)
         if writer is not None:
             writer.add_scalars(
                 f"Metric/train_multi",
@@ -161,13 +137,41 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
                 test_results_single,
                 epoch + 1
             )
-        # Early stopping
-        if valid_epoch_leaderboard >= np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value']):
-            patience = 10  # Reset patience counter
-        else:
-            patience -= 1
-            if patience == 0:
-                break
+
+        update_epoch_results_dict("train", train_results_multi)
+        update_epoch_results_dict("valid", valid_results_multi)
+        update_epoch_results_dict("test", test_results_multi)
+
+        counter += 1
+        if counter > 5:
+            saved_cond = np.logical_or(
+                get_best_n_metric_result("valid") < valid_epoch_leaderboard,
+                get_best_n_metric_result("test") < test_epoch_leaderboard
+            )
+            saved_cond = np.logical_or(
+                saved_cond,
+                epoch + 3 >= max_epochs
+            )
+            if saved_cond:
+                state = {
+                    'epoch': epoch + 1,
+                    'state_dict': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'scheduler': scheduler.state_dict(),
+                    "history": TRAINING_RESULT_DICT
+                }
+                path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
+                torch.save(state, path_aux)
+                save_training_history(best_model_path)
+            # Early stopping
+            if valid_epoch_leaderboard > np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value'][:-1]):
+                    patience = 10  # Reset patience counter
+            else:
+                patience -= 1
+                if patience == 0:
+                    break
+
+
     writer.flush()
     pbar.close()
     # Finding the highest leaderboard value index for 'valid' and 'test' sets
@@ -177,7 +181,11 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
     print(f"Highest leaderboard value index for valid set: {highest_valid_index}")
     print(f"Highest leaderboard value index for test set: {highest_test_index}")
     print(f"Training result dict: {TRAINING_RESULT_DICT}")
-    return
+
+    leaderboard_summary = get_leaderboard_summary(highest_valid_index, highest_test_index)
+    print(leaderboard_summary)
+
+    return leaderboard_summary
 
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,
           md_loss=None, scheduler=None, writer=None,):

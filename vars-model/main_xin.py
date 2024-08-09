@@ -15,6 +15,7 @@ from src.custom_model.model_selector import select_xin_net
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
+from datetime import datetime
 from torchvision.models.video import swin3d_s,  Swin3D_S_Weights, swin3d_t, Swin3D_T_Weights
 
 
@@ -32,16 +33,10 @@ def checkArguments():
         print("Possible arguments are: Yes or No")
         exit()
 
-    # args.pooling_type
-    if args.pooling_type != 'max' and args.pooling_type != 'mean' and args.pooling_type != 'attention':
-        print("Could not find your desired argument for --args.pooling_type:")
-        print("Possible arguments are: max or mean")
-        exit()
-
     # args.weighted_loss
-    if args.weighted_loss != 'Yes' and args.weighted_loss != 'No':
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes"]:
         print("Could not find your desired argument for --args.weighted_loss:")
-        print("Possible arguments are: Yes or No")
+        print("Possible arguments are: Base, No, Exp")
         exit()
 
     # args.start_frame
@@ -85,11 +80,15 @@ def main(*args):
         path = args.path
         pooling_type = "no-pooling"
         weighted_loss = args.weighted_loss
+        weight_exp_alpha = args.weight_exp_alpha
+        weight_exp_bias = args.weight_exp_bias
+        weight_exp_gamma = args.weight_exp_gamma
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
         continue_training = args.continue_training
         only_evaluation = args.only_evaluation
         path_to_model_weights = args.path_to_model_weights
+
     else:
         print("EXIT")
         exit()
@@ -100,7 +99,7 @@ def main(*args):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
 
-    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}+_G{gamma}_Step{step_size}_mv{net_version}"
+    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_mv{net_version}"
 
     best_model_path = os.path.join(
         "models",
@@ -174,7 +173,12 @@ def main(*args):
             num_views=num_views,
             transform=transformAug,
             transform_model=transforms_model,
-            video_shift_aug=video_shift_aug)
+            video_shift_aug=video_shift_aug,
+            weight_exp_alpha=weight_exp_alpha,
+            weight_exp_bias=weight_exp_bias,
+            weight_exp_gamma=weight_exp_gamma
+
+        )
         dataset_valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
                                                 num_views=num_views,
                                                 transform_model=transforms_model)
@@ -228,20 +232,41 @@ def main(*args):
             scheduler.load_state_dict(load['scheduler'])
             epoch_start = load['epoch']
 
-        if weighted_loss == 'Yes':
+        if weighted_loss == 'Exp':
+            print(dataset_train.getExpotentialWeight())
+            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_train.getExpotentialWeight()[0].cuda())
+            criterion_action = nn.CrossEntropyLoss(weight=dataset_train.getExpotentialWeight()[1].cuda())
+            criterion = [criterion_offence_severity, criterion_action]
+        elif weighted_loss in ['Base', 'Yes']:
+            print(dataset_train.getWeights())
             criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_train.getWeights()[0].cuda())
             criterion_action = nn.CrossEntropyLoss(weight=dataset_train.getWeights()[1].cuda())
             criterion = [criterion_offence_severity, criterion_action]
+
         else:
             criterion_offence_severity = nn.CrossEntropyLoss()
             criterion_action = nn.CrossEntropyLoss()
             criterion = [criterion_offence_severity, criterion_action]
 
         run_label = model_output_dirname.replace("/", "_")
-        writer = SummaryWriter(f"runs/{model_name} {run_label}")
-        trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
+        current_date = datetime.now().strftime("%Y%b%d_%H%M")
+        writer = SummaryWriter(f"runs/{current_date}_Xin{net_version}{pooling_type}{model_name} {pre_model} {run_label}")
+        start_time = time.time()
+        leadearboard_summary = trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
                 best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
-                writer=writer)
+                writer=writer, patience= args.patience)
+
+        end_time = time.time()
+        leadearboard_summary["training_time"] = round((end_time - start_time) / 3600, 4)
+        hyperparams = {attr: str(value) for attr, value in vars(args).items()}
+
+        for attr, value in hyperparams.items():
+            writer.add_text(f'Hyperparameters/{attr}', value)
+
+        # Alternatively, log all hyperparameters at once using add_hparams (if supported)
+        writer.add_hparams(hyperparams, leadearboard_summary)
+        writer.close()
+        print(f"Training finished. Training time:{leadearboard_summary['training_time']}")
 
     if only_evaluation == 0:
         print("Only evaluation 0")
@@ -305,14 +330,21 @@ if __name__ == '__main__':
     parser.add_argument("--net_version", required=False, type=int, default=1, help="XinNetVersion")
     parser.add_argument("--pooling_type", required=False, type=str, default="max",
                         help="Which type of pooling should be done")
-    parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
-                        help="If the custom_loss should be weighted")
+    parser.add_argument("--weighted_loss", required=False, type=str, default="Base",
+                        help="Weighted loss version")
+    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=4.0,
+                        help="weight_exp_hyperparam")
+    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.1,
+                        help="weighed exp bias hyper")
+    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=1.0,
+                        help="weighted exp gamma hyper")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
+    parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
 
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
