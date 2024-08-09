@@ -7,7 +7,7 @@ from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
 from torch.utils.data import DataLoader
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 from src.custom_trainers.train_hybrid import trainer,evaluation, sklearn_evaluation
-import torch.nn as nn
+from src.custom_loss.loss_selector import select_training_loss
 import torchvision.transforms as transforms
 from src.custom_model.hybrid_mvit_v2 import MultiVideoHybridMVit2
 from torchvision.models.video import MViT_V2_S_Weights
@@ -28,9 +28,9 @@ def checkArguments():
         print("Possible arguments are: Yes or No")
         exit()
     # args.weighted_loss
-    if args.weighted_loss not in ["Base", "No", "Exp","Yes"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp"]:
         print("Could not find your desired argument for --args.weighted_loss:")
-        print("Possible arguments are: Base, Exp, No")
+        print("Possible arguments are: Base, No, Exp, Yes, Focal, FocalCE")
         exit()
 
     # args.start_frame
@@ -76,6 +76,9 @@ def main(*args):
         weight_exp_alpha = args.weight_exp_alpha
         weight_exp_bias = args.weight_exp_bias
         weight_exp_gamma = args.weight_exp_gamma
+        focal_alpha = args.focal_alpha,
+        focal_gamma = args.focal_gamma,
+        ce_weight = args.ce_weight
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
         continue_training = args.continue_training
@@ -226,20 +229,13 @@ def main(*args):
             scheduler.load_state_dict(load['scheduler'])
             epoch_start = load['epoch']
 
-        if weighted_loss == 'Exp':
-            print(dataset_Train.getExpotentialWeight())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-        elif weighted_loss in ['Base', 'Yes']:
-            print(dataset_Train.getWeights())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getWeights()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getWeights()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-        else:
-            criterion_offence_severity = nn.CrossEntropyLoss()
-            criterion_action = nn.CrossEntropyLoss()
-            criterion = [criterion_offence_severity, criterion_action]
+        criterion = select_training_loss(
+            weighted_loss=weighted_loss,
+            dataset_train=dataset_Train,
+            focal_alpha=focal_alpha,
+            focal_gamma=focal_gamma,
+            ce_weight=ce_weight,
+        )
 
         run_label = model_output_dirname.replace("/", "_")
         current_date = datetime.now().strftime("%Y%b%d_%H%M")
@@ -293,6 +289,9 @@ if __name__ == '__main__':
                         help="weighed exp bias hyper")
     parser.add_argument("--weight_exp_gamma", required=False, type=float, default=2.0,
                         help="weighted exp gamma hyper")
+    parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
+    parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
+    parser.add_argument("--ce_weight", required=False, type=float, default=0.75, help="ce_weight")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")

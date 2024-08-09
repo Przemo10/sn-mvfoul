@@ -17,6 +17,7 @@ from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
 from datetime import datetime
 from torchvision.models.video import swin3d_s,  Swin3D_S_Weights, swin3d_t, Swin3D_T_Weights
+from src.custom_loss.loss_selector import select_training_loss
 
 
 
@@ -34,7 +35,7 @@ def checkArguments():
         exit()
 
     # args.weighted_loss
-    if args.weighted_loss not in ["Base", "No", "Exp", "Yes"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE","BaseExp"]:
         print("Could not find your desired argument for --args.weighted_loss:")
         print("Possible arguments are: Base, No, Exp")
         exit()
@@ -83,6 +84,9 @@ def main(*args):
         weight_exp_alpha = args.weight_exp_alpha
         weight_exp_bias = args.weight_exp_bias
         weight_exp_gamma = args.weight_exp_gamma
+        focal_alpha = args.focal_alpha,
+        focal_gamma = args.focal_gamma,
+        ce_weight =  args.ce_weight
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
         continue_training = args.continue_training
@@ -206,7 +210,9 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
+
     xin_network = select_xin_net(net_version)
+
     model = xin_network(num_views=num_views, net_name = pre_model).cuda()
 
     if path_to_model_weights != "":
@@ -232,21 +238,13 @@ def main(*args):
             scheduler.load_state_dict(load['scheduler'])
             epoch_start = load['epoch']
 
-        if weighted_loss == 'Exp':
-            print(dataset_train.getExpotentialWeight())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_train.getExpotentialWeight()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_train.getExpotentialWeight()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-        elif weighted_loss in ['Base', 'Yes']:
-            print(dataset_train.getWeights())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_train.getWeights()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_train.getWeights()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-
-        else:
-            criterion_offence_severity = nn.CrossEntropyLoss()
-            criterion_action = nn.CrossEntropyLoss()
-            criterion = [criterion_offence_severity, criterion_action]
+        criterion = select_training_loss(
+            weighted_loss=weighted_loss,
+            dataset_train = dataset_train,
+            focal_alpha=focal_alpha,
+            focal_gamma=focal_gamma,
+            ce_weight= ce_weight,
+        )
 
         run_label = model_output_dirname.replace("/", "_")
         current_date = datetime.now().strftime("%Y%b%d_%H%M")
@@ -338,6 +336,9 @@ if __name__ == '__main__':
                         help="weighed exp bias hyper")
     parser.add_argument("--weight_exp_gamma", required=False, type=float, default=1.0,
                         help="weighted exp gamma hyper")
+    parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
+    parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
+    parser.add_argument("--ce_weight", required=False, type=float, default=0.75, help="ce_weight")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
@@ -345,7 +346,6 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
-
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
     parser.add_argument("--path_to_model_weights", required=False, type=str, default="",

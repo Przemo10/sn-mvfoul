@@ -11,7 +11,7 @@ class WeightedFocalCELoss(nn.Module):
         self.gamma = gamma
         self.alpha = alpha
         self.ce_weight = ce_weight
-        self.cross_entropy = nn.CrossEntropyLoss(reduction='mean', ignore_index=-100, weight=weight)
+        self.cross_entropy = nn.CrossEntropyLoss(reduce='mean', ignore_index=-100, weight=weight)
         self.focal_loss = FocalLoss(alpha=alpha, gamma=gamma, weight=None, reduction='mean')
     def forward(self, inputs, targets):
         focal_loss = self.focal_loss(inputs, targets)

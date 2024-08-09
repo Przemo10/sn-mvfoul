@@ -5,7 +5,7 @@ from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
 from src.custom_trainers.train_videomae import trainer, evaluation
-import torch.nn as nn
+from src.custom_loss.loss_selector import select_training_loss
 import torchvision.transforms as transforms
 from src.custom_model.video_mae import VideoMAENetwork
 from src.custom_dataset.video_mae_dataset import MultiViewMAEDataset
@@ -34,7 +34,7 @@ def checkArguments():
         exit()
 
     # args.weighted_loss
-    if args.weighted_loss not  in ["Base", "No", "Exp", "Yes"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE","BaseExp"]:
         print("Could not find your desired argument for --args.weighted_loss:")
         print("Possible arguments are: Base, No, Exp")
         exit()
@@ -85,6 +85,9 @@ def main(*args):
         weight_exp_alpha = args.weight_exp_alpha
         weight_exp_bias = args.weight_exp_bias
         weight_exp_gamma = args.weight_exp_gamma
+        focal_alpha = args.focal_alpha,
+        focal_gamma = args.focal_gamma,
+        ce_weight = args.ce_weight
         continue_training = args.continue_training
         only_evaluation = args.only_evaluation
         path_to_model_weights = args.path_to_model_weights
@@ -183,20 +186,13 @@ def main(*args):
             scheduler.load_state_dict(load['scheduler'])
             epoch_start = load['epoch']
 
-        if weighted_loss == 'Exp':
-            print(dataset_Train.getExpotentialWeight())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-        elif weighted_loss in ['Base', 'Yes']:
-            print(dataset_Train.getWeights())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getWeights()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getWeights()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-        else:
-            criterion_offence_severity = nn.CrossEntropyLoss()
-            criterion_action = nn.CrossEntropyLoss()
-            criterion = [criterion_offence_severity, criterion_action]
+        criterion = select_training_loss(
+            weighted_loss=weighted_loss,
+            dataset_train=dataset_Train,
+            focal_alpha=focal_alpha,
+            focal_gamma=focal_gamma,
+            ce_weight=ce_weight,
+        )
 
     # Start training or evaluation
     if only_evaluation == 0:
@@ -261,6 +257,9 @@ if __name__ == '__main__':
                         help="weighed exp bias hyper")
     parser.add_argument("--weight_exp_gamma", required=False, type=float, default=1.0,
                         help="weighted exp gamma hyper")
+    parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
+    parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
+    parser.add_argument("--ce_weight", required=False, type=float, default=0.75, help="ce_weight")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")

@@ -6,7 +6,7 @@ from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
 from pyarrow.dataset import dataset
 from transformers.models.pop2piano.convert_pop2piano_weights_to_hf import model
-
+from src.custom_loss.loss_selector import select_training_loss
 from src.custom_dataset.baseline_dataset import MultiViewDataset
 from src.custom_trainers.train_base_distill import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
@@ -39,9 +39,9 @@ def checkArguments():
         exit()
 
     # args.weighted_loss
-    if args.weighted_loss != 'Yes' and args.weighted_loss != 'No':
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp"]:
         print("Could not find your desired argument for --args.weighted_loss:")
-        print("Possible arguments are: Yes or No")
+        print("Possible arguments are: Base, No, Exp, Yes, Focal, FocalCE")
         exit()
 
     # args.start_frame
@@ -90,6 +90,9 @@ def main(*args):
         weighted_loss = args.weighted_loss
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
+        focal_alpha = args.focal_alpha,
+        focal_gamma = args.focal_gamma,
+        ce_weight = args.ce_weight
         distil_temp = args.kdl_temp
         weight_factor = args.kdl_factor
         only_evaluation = args.only_evaluation
@@ -255,15 +258,13 @@ def main(*args):
 
         epoch_start = 0
 
-        if weighted_loss == 'Yes':
-            print(dataset_Train.getExpotentialWeight())
-            criterion_offence_severity = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[0].cuda())
-            criterion_action = nn.CrossEntropyLoss(weight=dataset_Train.getExpotentialWeight()[1].cuda())
-            criterion = [criterion_offence_severity, criterion_action]
-        else:
-            criterion_offence_severity = nn.CrossEntropyLoss()
-            criterion_action = nn.CrossEntropyLoss()
-            criterion = [criterion_offence_severity, criterion_action]
+        criterion = select_training_loss(
+            weighted_loss=weighted_loss,
+            dataset_train=dataset_Train,
+            focal_alpha=focal_alpha,
+            focal_gamma=focal_gamma,
+            ce_weight=ce_weight,
+        )
 
     # Start training or evaluation
     if only_evaluation == 0:
@@ -406,6 +407,7 @@ if __name__ == '__main__':
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
 
+
     parser.add_argument("--net_version_s", required=False, type=int, default=1, help="MvAggregateModelVersion")
     parser.add_argument("--net_version_t", required=False, type=int, default=1, help="MvAggregateModelVersion")
     parser.add_argument("--pooling_type_s", required=True, type=str, default="attention",
@@ -415,6 +417,9 @@ if __name__ == '__main__':
 
     parser.add_argument("--weighted_loss", required=False, type=str, default="Yes",
                         help="If the custom_loss should be weighted")
+    parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
+    parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
+    parser.add_argument("--ce_weight", required=False, type=float, default=0.75, help="ce_weight")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
