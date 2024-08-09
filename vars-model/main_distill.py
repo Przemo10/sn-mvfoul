@@ -8,7 +8,7 @@ from pyarrow.dataset import dataset
 from transformers.models.pop2piano.convert_pop2piano_weights_to_hf import model
 from src.custom_loss.loss_selector import select_training_loss
 from src.custom_dataset.baseline_dataset import MultiViewDataset
-from src.custom_trainers.train_base_distill import trainer, evaluation, sklearn_evaluation
+from src.custom_trainers.train_base_distil import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
 import torchvision.transforms as transforms
 from src.custom_model.baseline_model import MVNetwork
@@ -93,8 +93,8 @@ def main(*args):
         focal_alpha = args.focal_alpha,
         focal_gamma = args.focal_gamma,
         ce_weight = args.ce_weight
-        distil_temp = args.kdl_temp
-        weight_factor = args.kdl_factor
+        kdl_temp = args.kdl_temp
+        kdl_lambda  = args.kld_lambda
         only_evaluation = args.only_evaluation
         path_to_model_weights_s = args.student_path_to_model_weights_s
         path_to_model_weights_t = args.path_to_model_weights_t
@@ -379,7 +379,7 @@ def main(*args):
 
         trainer(train_loader, val_loader2, test_loader2,teacher_model, student_model, optimizer, scheduler, criterion,
                 best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
-                distil_temp=distil_temp, weight_factor=weight_factor)
+                kdl_temp=kdl_temp, kdl_lambda=kdl_lambda)
 
     return 0
 
@@ -427,7 +427,7 @@ if __name__ == '__main__':
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
     parser.add_argument("--kdl_temp", required=False, type=float, default=2.0, help="distill_temp")
-    parser.add_argument("--kdl_factor", required=False, type=float, default=0.5, help="Weight decacy")
+    parser.add_argument("--kdl_lambda", required=False, type=float, default=0.5, help="Weight decacy")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
     parser.add_argument("--path_to_model_weights_s", required=True, type=str, default="",

@@ -103,7 +103,7 @@ def main(*args):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
 
-    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_mv{net_version}"
+    model_output_dirname = f"{LR}_{weighted_loss}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_mv{net_version}"
 
     best_model_path = os.path.join(
         "models",

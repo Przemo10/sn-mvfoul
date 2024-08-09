@@ -16,7 +16,8 @@ from src.custom_trainers.training_history import get_best_n_metric_result, find_
 from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
 from src.custom_trainers.training_history import save_training_history, get_leaderboard_summary
 
-def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion, best_model_path,
+def trainer(train_loader, val_loader2, test_loader2,
+            model, optimizer, scheduler, criterion, best_model_path,
             epoch_start, model_name, path_dataset, max_epochs=100, patience = 10, writer=None,
             distil_temp=2.0, distil_lambda =1.0):
     logging.info("start training")
@@ -79,9 +80,9 @@ def trainer(train_loader, val_loader2, test_loader2, model, optimizer, scheduler
         print(f" Single: {valid_results_single},\n Multi : {valid_results_multi}")
         valid_epoch_leaderboard = valid_results_multi["leaderboard_value"]
 
-        ###################### VALIDATION ###################
+        ###################### TEST ###################
         prediction_file, loss_action, loss_offence_severity, loss_mutual_distillation = train(
-            val_loader2,
+            test_loader2,
             model,
             criterion,
             optimizer,

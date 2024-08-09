@@ -1,7 +1,6 @@
 import logging
 import os
 import torch
-from tensorboard import summary
 from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY

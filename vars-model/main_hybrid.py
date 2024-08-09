@@ -94,7 +94,7 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_v{num_views}"
+    model_output_dirname = f"{LR}_{weighted_loss}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_v{num_views}"
 
     best_model_path = os.path.join(
         "models", os.path.join(model_name, os.path.join(str(num_views), os.path.join(pre_model, model_output_dirname))))
