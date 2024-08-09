@@ -10,10 +10,14 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="transformers.feature_extraction_utils")
 warnings.filterwarnings("ignore", message=".*list of numpy.ndarrays is extremely slow.*")
 from transformers import AutoImageProcessor
+from src.custom_model.model_selector import PRETRAINED_VIDEO_MAE
+
 
 class MultiViewMAEDataset(Dataset):
     def __init__(self, path, start, end, fps, split, num_views, transform=None, video_shift_aug = 0,
-                 weight_exp_alpha = 8.0, weight_exp_bias = 0.02, weight_exp_gamma =2.0, crop25 =0):
+                 weight_exp_alpha = 8.0, weight_exp_bias = 0.02, weight_exp_gamma =2.0, crop25 =0,
+                 pretrained_version = 1,
+                 ):
 
         if split != 'chall':
             # To load the annotations
@@ -64,7 +68,8 @@ class MultiViewMAEDataset(Dataset):
         self.start = start
         self.end = end
         self.transform = transform
-        self.transform_model = AutoImageProcessor.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        pretrained_name = PRETRAINED_VIDEO_MAE.get(pretrained_version, 1)
+        self.transform_model = AutoImageProcessor.from_pretrained(pretrained_name)
         self.num_views = num_views
         self.model_frames = 16
         self.fps = fps

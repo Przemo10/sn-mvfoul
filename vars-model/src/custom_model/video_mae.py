@@ -3,14 +3,17 @@ from transformers import VideoMAEForVideoClassification
 from torch import  nn
 from src.utils import batch_tensor, unbatch_tensor
 from src.custom_model.pooling_attention import select_pooling_attention
+from src.custom_model.model_selector import PRETRAINED_VIDEO_MAE
 
 
 class VideoMAENetwork(torch.nn.Module):
 
-    def __init__(self, agr_type='max'):
+    def __init__(self, agr_type='max', pretrained_version:int = 1):
         super().__init__()
 
-        self.model = VideoMAEForVideoClassification.from_pretrained("MCG-NJU/videomae-base-finetuned-kinetics")
+        pretrained_name  = PRETRAINED_VIDEO_MAE.get(pretrained_version, 1)
+
+        self.model = VideoMAEForVideoClassification.from_pretrained(pretrained_name)
         self.model.classifier = nn.Identity()
         self.feat_dim = 400
         self.norm_dim = 768

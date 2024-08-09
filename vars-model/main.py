@@ -221,7 +221,7 @@ def main(*args):
 
         # Create the dataloaders for train validation and test datasets
         train_loader = torch.utils.data.DataLoader(dataset_Train,
-            batch_size=selected_batch_size, shuffle=False,
+            batch_size=selected_batch_size, shuffle=True,
             num_workers=max_num_worker, pin_memory=True)
 
         val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,

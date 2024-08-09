@@ -69,7 +69,7 @@ def main(*args):
         weight_decay = args.weight_decay
 
         model_name = args.model_name
-        pre_model = args.pre_model
+        pretrained_version= args.pretrained_version
         num_views = args.num_views
         fps = args.fps
         number_of_frames = int((args.end_frame - args.start_frame) / (
@@ -102,7 +102,8 @@ def main(*args):
     best_model_path = os.path.join(
         "models",
         os.path.join(model_name,
-                     os.path.join(str(num_views), os.path.join(pre_model, os.path.join(model_output_dirname)))
+                     os.path.join(str(num_views), os.path.join("pretrained_v" + str(pretrained_version),
+                                                               os.path.join(model_output_dirname)))
                      )
     )
     os.makedirs(best_model_path, exist_ok=True)
@@ -145,7 +146,7 @@ def main(*args):
 
     # Create the dataloaders for train validation and test datasets
     train_loader = torch.utils.data.DataLoader(dataset_Train,
-                                               batch_size=batch_size, shuffle=False,
+                                               batch_size=batch_size, shuffle=True,
                                                num_workers=max_num_worker, pin_memory=True)
 
     val_loader2 = torch.utils.data.DataLoader(dataset_Valid2,
@@ -212,7 +213,7 @@ def main(*args):
     else:
         run_label = model_output_dirname.replace("/", "_")
         current_date = datetime.now().strftime("%Y%b%d_%H%M")
-        writer = SummaryWriter(f"runs/{current_date}_Video_mae_{model_name} {run_label}")
+        writer = SummaryWriter(f"runs/{current_date}_Video_mae_{pretrained_version}_{model_name} {run_label}")
         start_time = time.time()
         leadearboard_summary = trainer(
             train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
@@ -249,8 +250,7 @@ if __name__ == '__main__':
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
-    parser.add_argument("--pre_model", required=False, type=str, default="video_mae",
-                        help="Name of the pretrained model")
+    parser.add_argument("--pretrained_version", required=False, type=int, default=1, help="Pretrained version")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean",
                         help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base",

@@ -24,3 +24,14 @@ def select_xin_net(net_version: int) -> Type[Union[XinMultimodalNet, XinMultimod
         return XinMultimodalNet
 
 
+PRETRAINED_VIDEO_MAE  = {
+
+    1: "MCG-NJU/videomae-base-finetuned-kinetics",
+    2: "MCG-NJU/videomae-large-finetuned-kinetics",
+    3: "MCG-NJU/videomae-base-finetuned-ssv2",
+    4: "marekk/video_soccer_goal_detection",
+    5: "anirudhmu/videomae-base-finetuned-soccer-action-recognition",
+}
+
+
+
