@@ -435,21 +435,21 @@ if __name__ == '__main__':
     parser.add_argument("--freeze_layers", required=False, type=int, default=0, help="Freeze layers")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base", help="If the custom_loss should be weighted")
-    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=8.0,
+    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=7.0,
                         help="weight_exp_hyperparam")
-    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.02,
+    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.1,
                         help="weighed exp bias hyper")
-    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=2.0,
+    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=1.0,
                         help="weighted exp gamma hyper")
     parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
     parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
-    parser.add_argument("--ce_weight", required=False, type=float, default=0.75, help="ce_weight")
+    parser.add_argument("--ce_weight", required=False, type=float, default=0.8, help="ce_weight")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
+    parser.add_argument("--weight_decay", required=False, type=float, default=1e-5, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3, help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
     parser.add_argument("--path_to_model_weights", required=False, type=str, default="", help="Path to the model weights")

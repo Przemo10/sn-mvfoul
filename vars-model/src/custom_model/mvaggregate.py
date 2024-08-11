@@ -174,7 +174,7 @@ class MVAggregate(nn.Module):
         return pred_offence_severity, pred_action, attention
 
 
-class MVAggregate2(nn.Module):
+class MVAggregate10(nn.Module):
     def __init__(self,  model, agr_type="max", feat_dim=400, lifting_net=nn.Sequential()):
         super().__init__()
         self.agr_type = agr_type
@@ -182,6 +182,7 @@ class MVAggregate2(nn.Module):
         self.inter = nn.Sequential(
             nn.LayerNorm(feat_dim),
             nn.Linear(feat_dim, feat_dim),
+            nn.Sigmoid(),
         )
 
         self.fc_offence = nn.Sequential(

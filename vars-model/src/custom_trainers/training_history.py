@@ -66,9 +66,7 @@ def get_leaderboard_summary(highest_valid_index, highest_test_index):
         "leaderboard_value_valid_best_test": TRAINING_RESULT_DICT["valid"]["leaderboard_value"][highest_test_index],
         "leaderboard_value_test_best_test": TRAINING_RESULT_DICT["test"]["leaderboard_value"][highest_test_index],
         "last_saved_epoch": len(TRAINING_RESULT_DICT["valid"]["leaderboard_value"]),
-        "leaderboard_value_valid_last_epoch": TRAINING_RESULT_DICT["valid"]["leaderboard_value"][
-            len(TRAINING_RESULT_DICT["valid"]) - 1],
-        "leaderboard_value_test_last_epoch": TRAINING_RESULT_DICT["test"]["leaderboard_value"][
-            len(TRAINING_RESULT_DICT["valid"]) - 1],
+        "leaderboard_value_valid_last_epoch": TRAINING_RESULT_DICT["valid"]["leaderboard_value"][ 1],
+        "leaderboard_value_test_last_epoch": TRAINING_RESULT_DICT["test"]["leaderboard_value"][- 1],
     }
     return leaderboard_summary

@@ -142,7 +142,11 @@ def trainer(train_loader,
                 patience = patience_counter
             else:
                 patience -= 1
-                if patience == 0:
+                equal_valid = np.logical_and(
+                    valid_epoch_leaderboard == TRAINING_RESULT_DICT['valid']['leaderboard_value'][-3],
+                    counter > 10
+                )
+                if patience == 0 or equal_valid:
                     break
 
     writer.flush()
