@@ -213,10 +213,19 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
-                                      betas=(0.9, 0.95), eps=1e-04,
+                                      betas=(0.85, 0.95), eps=1e-04,
                                       weight_decay=weight_decay, amsgrad=False)
 
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        #  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer=optimizer,
+            pct_start=0.3,
+            final_div_factor=10000,
+            max_lr = LR,
+            steps_per_epoch = len(train_loader),
+            epochs=max_epochs,
+            verbose=True
+        )
 
 
         epoch_start = 0
@@ -283,23 +292,23 @@ if __name__ == '__main__':
                         help="Name of the pretrained model")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base",
                         help="Version of weighted loss Base, Exp, No")
-    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=8.0,
+    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=6.0,
                         help="weight_exp_hyperparam")
-    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.02,
+    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.1,
                         help="weighed exp bias hyper")
-    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=2.0,
+    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=1.0,
                         help="weighted exp gamma hyper")
     parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
     parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
-    parser.add_argument("--ce_weight", required=False, type=float, default=0.75, help="ce_weight")
+    parser.add_argument("--ce_weight", required=False, type=float, default=0.2, help="ce_weight")
     parser.add_argument("--start_frame", required=False, type=int, default=0, help="The starting frame")
     parser.add_argument("--end_frame", required=False, type=int, default=125, help="The ending frame")
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
-    parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
-    parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
-    parser.add_argument("--distil_temp", required=False, type=int, default=2.0, help="distil temp")
-    parser.add_argument("--distil_lambda", required=False, type=float, default=0.25, help="dill lambda")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
+    parser.add_argument("--step_size", required=False, type=int, default=0, help="StepLR parameter")
+    parser.add_argument("--gamma", required=False, type=float, default=0, help="StepLR parameter")
+    parser.add_argument("--distil_temp", required=False, type=int, default=1, help="distil temp")
+    parser.add_argument("--distil_lambda", required=False, type=float, default=10, help="dill lambda")
+    parser.add_argument("--weight_decay", required=False, type=float, default=0.0001, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

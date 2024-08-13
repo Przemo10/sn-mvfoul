@@ -23,7 +23,7 @@ class XinMultimodalNet3(torch.nn.Module):
         self.num_views = num_views
         # self.feat_dim = 400
         # self.token_dim = 768
-        self.token_dim = 256
+        self.token_dim = 400
         self.last_extractor_block = nn.Sequential(
             nn.Linear(768, self.token_dim),
             nn.ReLU(),

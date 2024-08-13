@@ -11,7 +11,7 @@ from src.custom_trainers.train_xin import trainer, evaluation, sklearn_evaluatio
 from src.custom_loss.loss_selector import select_training_loss
 import torchvision.transforms as transforms
 from torch.utils.data import  DataLoader
-from src.custom_model.model_selector import select_xin_net
+from src.custom_model.model_selector import XIN_NET_VERSION
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
@@ -83,7 +83,7 @@ def main(*args):
         batch_size = args.batch_size
         data_aug = args.data_aug
         path = args.path
-        pooling_type = "no-pooling"
+        pooling_type = args.pooling_type
         weighted_loss = args.weighted_loss
         weight_exp_alpha = args.weight_exp_alpha
         weight_exp_bias = args.weight_exp_bias
@@ -185,6 +185,7 @@ def main(*args):
             weight_exp_gamma=weight_exp_gamma
 
         )
+        print(dataset_train.distribution_offence_severity)
         dataset_valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
                                                 num_views=5,
                                                 transform_model=transforms_model)
@@ -212,8 +213,9 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-    xin_network = select_xin_net(net_version)
-    model = xin_network(num_views=num_views, net_name = pre_model).cuda()
+    xin_network = XIN_NET_VERSION.get(net_version)
+    print(xin_network, pooling_type)
+    model = xin_network(num_views=num_views, net_name = pre_model, agr_type = pooling_type).cuda()
 
     if path_to_model_weights != "":
         path_model = os.path.join(path_to_model_weights)
@@ -223,7 +225,7 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
-                                      betas=(0.9, 0.95), eps=1e-04,
+                                      betas=(0.90, 0.95), eps=1e-07,
                                       weight_decay=weight_decay, amsgrad=False)
 
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
@@ -321,7 +323,7 @@ if __name__ == '__main__':
     parser.add_argument('--max_num_worker', required=False, type=int, default=1, help='number of worker to load data')
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
-    parser.add_argument("--num_views", required=False, type=int, default=2, help="Number of views")
+    parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s",
@@ -331,11 +333,11 @@ if __name__ == '__main__':
                         help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base",
                         help="Weighted loss version")
-    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=8.0,
+    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=6.0,
                         help="weight_exp_hyperparam")
-    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.02,
+    parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.1,
                         help="weighed exp bias hyper")
-    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=2.0,
+    parser.add_argument("--weight_exp_gamma", required=False, type=float, default=1.0,
                         help="weighted exp gamma hyper")
     parser.add_argument("--focal_alpha", required=False, type=float, default=1.0, help="focal_alpha")
     parser.add_argument("--focal_gamma", required=False, type=float, default=2.0,help="focal_gamma")
@@ -346,7 +348,7 @@ if __name__ == '__main__':
     parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
-
+    parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
     parser.add_argument("--path_to_model_weights", required=False, type=str, default="",

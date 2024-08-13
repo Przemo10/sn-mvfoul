@@ -11,7 +11,7 @@ from src.custom_trainers.train_xin import trainer, evaluation, sklearn_evaluatio
 import torch.nn as nn
 import torchvision.transforms as transforms
 from torch.utils.data import  DataLoader
-from src.custom_model.model_selector import select_xin_net
+from src.custom_model.model_selector import XIN_NET_VERSION
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
@@ -69,7 +69,7 @@ def main(*args):
         end_frame = args.end_frame
         weight_decay = args.weight_decay
         video_shift_aug = args.video_shift_aug
-        model_name = f"{args.model_name},_v{args.net_version}"
+        model_name = f"{args.model_name}_v{args.net_version}"
         net_version = args.net_version
         pre_model = args.pre_model
         num_views = args.num_views
@@ -210,8 +210,8 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-
-    xin_network = select_xin_net(net_version)
+    xin_network = XIN_NET_VERSION.get(net_version)
+    print(xin_network)
 
     model = xin_network(num_views=num_views, net_name = pre_model).cuda()
 
@@ -223,7 +223,7 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
-                                      betas=(0.9, 0.95), eps=1e-04,
+                                      betas=(0.92, 0.99), eps=1e-04,
                                       weight_decay=weight_decay, amsgrad=False)
 
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
@@ -330,7 +330,7 @@ if __name__ == '__main__':
                         help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base",
                         help="Weighted loss version")
-    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=4.0,
+    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=6.0,
                         help="weight_exp_hyperparam")
     parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.1,
                         help="weighed exp bias hyper")

@@ -92,8 +92,11 @@ def trainer(train_loader,
         print(f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)} ")
         print(test_results)
         test_epoch_leaderboard = test_results["leaderboard_value"]
+        current_lr = scheduler.get_last_lr()
+        print(f"Epoch {epoch + 1}: Current learning rate is {current_lr}")
 
         scheduler.step()
+
 
         if writer is not None:
             writer.add_scalars(
@@ -144,7 +147,7 @@ def trainer(train_loader,
                 patience -= 1
                 equal_valid = np.logical_and(
                     valid_epoch_leaderboard == TRAINING_RESULT_DICT['valid']['leaderboard_value'][-3],
-                    counter > 10
+                    counter > 20
                 )
                 if patience == 0 or equal_valid:
                     break

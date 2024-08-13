@@ -17,12 +17,13 @@ class MultiViewDatasetHybrid(Dataset):
                 path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
             # self.clips = self.clips[:10]
+            # print(len(self.labels_action)/(8 *self.distribution_action))
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity,
                                                            len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
 
-            self.weights_offence_severity = torch.div(1, self.distribution_offence_severity)
-            self.weights_action = torch.div(1, self.distribution_action)
+            self.weights_offence_severity = torch.div(1, 4* self.distribution_offence_severity)
+            self.weights_action = torch.div(1, 8 * self.distribution_action)
             self.weights_inverse_exp_offence_severity = create_inverse_proportion_exp_fun_weights(
                 self.distribution_offence_severity * len(self.labels_offence_severity),
                 alpha=weight_exp_alpha,
@@ -153,5 +154,5 @@ class MultiViewDatasetHybrid(Dataset):
             return -1, -1, videos, str(index)
 
     def __len__(self):
-        return self.length
+        return  self.length
 

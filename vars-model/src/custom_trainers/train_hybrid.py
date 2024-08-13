@@ -105,7 +105,7 @@ def trainer(train_loader, val_loader2, test_loader2,
         print(f" Single: {test_results_single},\n Multi : {test_results_multi}")
         test_epoch_leaderboard = test_results_multi["leaderboard_value"]
 
-        scheduler.step()
+        # scheduler.step()
 
         if writer is not None:
             writer.add_scalars(
@@ -295,7 +295,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
                 optimizer.step()
-                # scheduler.step()
+                scheduler.step()
 
             loss_total_action += float(view_loss_action)
             loss_total_offence_severity += float(view_loss_offence_severity)

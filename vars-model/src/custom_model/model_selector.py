@@ -2,10 +2,8 @@ from src.custom_model.mvaggregate import MVAggregate, MVAggregate2
 from typing import Union, Type
 from torch import nn
 from src.custom_model.xin_net import XinMultimodalNet
-from src.custom_model.xin_net2 import XinMultimodalNet2
-from src.custom_model.xin_net3 import XinMultimodalNet3
-from src.custom_model.pooling_attention import WeightedAggregate, ViewAvgAggregate, ViewMaxAggregate
-from src.custom_model.pooling_attention import ViewMaxMeanWeightAggregate, ViewMaxMeanAlphaAggregate
+from src.custom_model.xin_net_n1 import  XinMultimodalNetN10, XinMultimodalNetN15, XinMultimodalNetN16
+from src.custom_model.xin_net_n2 import  XinMultimodalNetN20, XinMultimodalNetN25
 
 
 def select_baseline_mv_aggregate(mv_aggregate_version: int) -> Type[Union[MVAggregate, MVAggregate2]]:
@@ -14,15 +12,19 @@ def select_baseline_mv_aggregate(mv_aggregate_version: int) -> Type[Union[MVAggr
     else:
         return MVAggregate
 
+#  first number 1 concat
+#  first number 2 attention
 
-def select_xin_net(net_version: int) -> Type[Union[XinMultimodalNet, XinMultimodalNet2, XinMultimodalNet3]]:
-    if net_version == 2:
-        return XinMultimodalNet2
-    elif net_version == 3:
-        return XinMultimodalNet3
-    else:
-        return XinMultimodalNet
+XIN_NET_VERSION = {
 
+    10: XinMultimodalNetN10,
+    15: XinMultimodalNetN15,
+    16: XinMultimodalNetN16,
+    20: XinMultimodalNetN20,
+    25: XinMultimodalNetN25,
+     1: XinMultimodalNet
+
+}
 
 PRETRAINED_VIDEO_MAE  = {
 

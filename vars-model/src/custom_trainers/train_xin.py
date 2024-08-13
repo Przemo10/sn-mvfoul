@@ -161,7 +161,6 @@ def trainer(train_loader,
 
     return leaderboard_summary
 
-
 def train(dataloader, model, criterion, optimizer, epoch, model_name, train=False, set_name="train", pbar=None,
           md_loss=None, scheduler=None, writer=None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -201,6 +200,10 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             output = model(mvclips)
             batch_size, total_views, _, _, _, _ = mvclips.shape
 
+
+            aggregated_single_offence_logits = []
+            aggregated_single_action_logits = []
+
             # single_view_transformation
             for view_id in range(total_views):
                 single_label_id = f"single_{view_id}"
@@ -212,25 +215,63 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                     single_view_offence_output = single_view_offence_output.unsqueeze(0)
                     single_view_action_output = single_view_action_output.unsqueeze(0)
 
+                aggregated_single_action_logits.append(single_view_action_output)
+                aggregated_single_offence_logits.append(single_view_offence_output)
+
                 # compute total_single_view_loss
-                single_view_loss_offence_severity += criterion[0](single_view_offence_output, targets_offence_severity)
-                single_view_loss_action += criterion[1](single_view_action_output, targets_action)
+                single_view_loss_offence_severity += 0.1 * criterion[0](single_view_offence_output, targets_offence_severity)
+                single_view_loss_action += 0.1 * criterion[1](single_view_action_output, targets_action)
+
+            aggregated_offence_logits = torch.max(torch.stack(aggregated_single_offence_logits), dim=0)[0]
+            aggregated_action_logits = torch.max(torch.stack(aggregated_single_action_logits), dim=0)[0]
+            # single_view_loss_offence_severity += 0.2 *criterion[0](aggregated_offence_logits, targets_offence_severity)
+            # single_view_loss_action += 0.2*  criterion[1](aggregated_action_logits, targets_action)
 
             if 'mv_collection' in list(output.keys()):
                 multi_view_offence_output = output['mv_collection']['offence_logits']
                 multi_view_action_output = output['mv_collection']['action_logits']
 
-                # evaluation result ...
-                for i in range(len(action)):
-                    values = {
-                        "Action class": INVERSE_EVENT_DICTIONARY["action_class"][
-                            torch.argmax(multi_view_action_output.detach().cpu(), dim=1)[i].item()]
-                    }
-                    preds_sev = torch.argmax(multi_view_offence_output.detach().cpu(), dim=1)
-                    offence, severity = OFFENCE_SEVERITY_MAP[preds_sev[i].item()]
-                    values["Offence"] = offence
-                    values["Severity"] = severity
-                    multi_view_data["Actions"][action[i]] = values
+                if len(action) == 1:
+
+                    preds_sev = torch.argmax(multi_view_offence_output, 0)  # dla video-mae
+                    preds_act = torch.argmax(multi_view_action_output, 0)
+
+                    values = {}
+                    values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
+                    if preds_sev.item() == 0:
+                        values["Offence"] = "No offence"
+                        values["Severity"] = ""
+                    elif preds_sev.item() == 1:
+                        values["Offence"] = "Offence"
+                        values["Severity"] = "1.0"
+                    elif preds_sev.item() == 2:
+                        values["Offence"] = "Offence"
+                        values["Severity"] = "3.0"
+                    elif preds_sev.item() == 3:
+                        values["Offence"] = "Offence"
+                        values["Severity"] = "5.0"
+                    multi_view_data["Actions"][action[0]] = values
+                else:
+
+                    preds_sev = torch.argmax(multi_view_offence_output.detach().cpu(), 1)
+                    preds_act = torch.argmax(multi_view_action_output.detach().cpu(), 1)
+
+                    for i in range(len(action)):
+                        values = {}
+                        values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act[i].item()]
+                        if preds_sev[i].item() == 0:
+                            values["Offence"] = "No offence"
+                            values["Severity"] = ""
+                        elif preds_sev[i].item() == 1:
+                            values["Offence"] = "Offence"
+                            values["Severity"] = "1.0"
+                        elif preds_sev[i].item() == 2:
+                            values["Offence"] = "Offence"
+                            values["Severity"] = "3.0"
+                        elif preds_sev[i].item() == 3:
+                            values["Offence"] = "Offence"
+                            values["Severity"] = "5.0"
+                        multi_view_data["Actions"][action[i]] = values
 
                 if len(multi_view_offence_output.size()) == 1:
                     multi_view_offence_output = multi_view_offence_output.unsqueeze(0)
@@ -239,6 +280,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                 # multi-view-loss
                 multi_view_loss_offence_severity = criterion[0](multi_view_offence_output, targets_offence_severity)
                 multi_view_view_loss_action = criterion[1](multi_view_action_output, targets_action)
+                # print(multi_view_action_output, targets_action)
                 multi_view_loss = multi_view_loss_offence_severity + multi_view_view_loss_action
 
             loss = single_view_loss_offence_severity + single_view_loss_offence_severity + multi_view_loss
@@ -312,7 +354,7 @@ def sklearn_evaluation(dataloader,
             targets_action_list.extend(targets_action_int_or_list)
             pred_offence_list.extend(preds_sev.detach().cpu().numpy().tolist())
             pred_action_list.extend(preds_act.cpu().numpy().tolist())
-            print(preds_sev.detach().cpu().numpy().tolist(), preds_act.cpu().numpy().tolist())
+
         gc.collect()
         torch.cuda.empty_cache()
 

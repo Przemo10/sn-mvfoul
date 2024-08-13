@@ -26,9 +26,10 @@ class MultiVideoHybridMVit2(nn.Module):
         self.feet_dim = 400
         self.token_dim = 768
         self.intern = nn.Sequential(
+
             nn.Linear(self.token_dim, self.feet_dim),
-            nn.BatchNorm1d(self.feet_dim),
-            nn.ReLU(),
+            nn.LayerNorm(self.feet_dim),
+
 
         )
 
@@ -200,7 +201,7 @@ class MultiVideoHybridMVit2(nn.Module):
 
 # Usage example:
 # Initialize the model
-model = MultiVideoHybridMVit2(num_views=2)
+#model = MultiVideoHybridMVit2(num_views=2)
 # Example input: [batch_size, num_views, channels, depth, height, width]
 #videos = torch.randn(4, 2, 3, 16, 224, 224)
 """

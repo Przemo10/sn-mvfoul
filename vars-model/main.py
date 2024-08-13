@@ -9,6 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 from src.custom_dataset.baseline_dataset import MultiViewDataset
 from src.custom_trainers.train import trainer, evaluation, sklearn_evaluation
 import torch.nn as nn
+from src.custom_loss.custom_step_lr_scheduler import  CustomStepLRScheduler
 import torchvision.transforms as transforms
 from src.custom_model.baseline_model import MVNetwork
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
@@ -260,10 +261,10 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR, 
-                                    betas=(0.9, 0.999), eps=1e-07, 
+                                    betas=(0.92, 0.999), eps=1e-07,
                                     weight_decay=weight_decay, amsgrad=False)
         
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        scheduler = CustomStepLRScheduler(optimizer, step_size=step_size, gamma=gamma)
 
         epoch_start = 0
 
@@ -435,7 +436,7 @@ if __name__ == '__main__':
     parser.add_argument("--freeze_layers", required=False, type=int, default=0, help="Freeze layers")
     parser.add_argument("--pooling_type", required=False, type=str, default="mean", help="Which type of pooling should be done")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base", help="If the custom_loss should be weighted")
-    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=7.0,
+    parser.add_argument("--weight_exp_alpha", required=False, type=float, default=6.0,
                         help="weight_exp_hyperparam")
     parser.add_argument("--weight_exp_bias", required=False, type=float, default=0.1,
                         help="weighed exp bias hyper")
@@ -449,8 +450,8 @@ if __name__ == '__main__':
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=1e-5, help="Weight decacy")
-    parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
+    parser.add_argument("--weight_decay", required=False, type=float, default=1e-3, help="Weight decacy")
+    parser.add_argument("--patience", required=False, type=int, default=20, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3, help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
     parser.add_argument("--path_to_model_weights", required=False, type=str, default="", help="Path to the model weights")
 
