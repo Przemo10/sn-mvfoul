@@ -39,7 +39,7 @@ def checkArguments():
         exit()
 
     # args.weighted_loss
-    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp", "WeightedFocal"]:
         print("Could not find your desired argument for --args.weighted_loss:")
         print("Possible arguments are: Base, No, Exp, Yes, Focal, FocalCE")
         exit()
@@ -185,7 +185,6 @@ def main(*args):
             weight_exp_gamma=weight_exp_gamma
 
         )
-        print(dataset_train.distribution_offence_severity)
         dataset_valid2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='valid',
                                                 num_views=5,
                                                 transform_model=transforms_model)

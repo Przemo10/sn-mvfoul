@@ -1,5 +1,6 @@
 from src.custom_loss.focal_cross_entropy  import FocalLoss
 from src.custom_loss.weighted_focal_ce_loss import WeightedFocalCELoss
+from src.custom_loss.weighted_focal_loss import WeightedFocalLoss
 from typing import Union, Type, List
 from src.custom_dataset.baseline_dataset import MultiViewDataset
 from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
@@ -40,7 +41,17 @@ def select_training_loss(
             ce_weight=ce_weight,
             weight=dataset_train.getExpotentialWeight()[1].cuda()
         )
-
+    elif weighted_loss == 'WeightedFocal':
+        criterion_offence_severity = WeightedFocalLoss(
+            alpha=focal_alpha,
+            gamma=focal_gamma,
+            weights=dataset_train.getWeights()[0].cuda()
+        )
+        criterion_action = WeightedFocalLoss(
+            alpha=focal_alpha,
+            gamma=focal_gamma,
+            weights=dataset_train.getWeights()[1].cuda()
+        )
     else:
         criterion_offence_severity = nn.CrossEntropyLoss()
         criterion_action = nn.CrossEntropyLoss()

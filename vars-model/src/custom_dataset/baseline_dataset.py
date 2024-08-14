@@ -21,8 +21,8 @@ class MultiViewDataset(Dataset):
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity, len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))
 
-            self.weights_offence_severity = torch.div(1, 3*4* 8 *self.distribution_offence_severity)
-            self.weights_action = torch.div(1, self.distribution_action)
+            self.weights_offence_severity = torch.div(1, 4 *self.distribution_offence_severity)
+            self.weights_action = torch.div(1,8 * self.distribution_action)
             self.weights_inverse_exp_offence_severity = create_inverse_proportion_exp_fun_weights(
                 self.distribution_offence_severity * len(self.labels_offence_severity),
                 alpha=weight_exp_alpha,

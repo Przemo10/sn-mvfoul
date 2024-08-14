@@ -237,6 +237,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                     preds_act = torch.argmax(multi_view_action_output, 0)
 
                     values = {}
+
                     values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
                     if preds_sev.item() == 0:
                         values["Offence"] = "No offence"
