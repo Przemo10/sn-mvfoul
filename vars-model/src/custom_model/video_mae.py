@@ -15,20 +15,26 @@ class VideoMAENetwork(torch.nn.Module):
 
         self.model = VideoMAEForVideoClassification.from_pretrained(pretrained_name)
         self.model.classifier = nn.Identity()
-        self.feat_dim = 400
+        self.feat_dim = 256
         self.norm_dim = 768
         self.flatten_shape = 3072
+        self.drop_block = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(self.norm_dim, self.feat_dim),
+            nn.LayerNorm(self.feat_dim),
+            nn.Dropout(0.2),
+        )
         self.lifting_net = nn.Sequential()
         self.aggregation_model = select_pooling_attention(
             agr_type=agr_type,
             model=self.model,
             lifting_net=self.lifting_net,
-            feat_dim=self.norm_dim
+            feat_dim=self.feat_dim
         )
         self.inter = nn.Sequential(
             nn.Dropout(0.2),
-            nn.LayerNorm(self.norm_dim),
-            nn.Linear(self.norm_dim,self.feat_dim),
+            nn.LayerNorm(self.feat_dim),
+            nn.Linear(self.feat_dim, self.feat_dim),
             nn.Linear(self.feat_dim, self.feat_dim),
         )
 
@@ -63,6 +69,7 @@ class VideoMAENetwork(torch.nn.Module):
         # print(mvimages.shape) torch.Size([4, 2, 16, 3, 224, 224])
         B, V, C, D, H, W = mvimages.shape  # Batch, Views, Channel, Depth, Height,
         output = self.model(batch_tensor(mvimages, dim=1, squeeze=True))[0]
+        output = self.drop_block(output)
         # print(output.shape) (8, 400)
         aux = self.lifting_net(unbatch_tensor(output, B, dim=1, unsqueeze=True))
         # print(output.shape, aux.shape) (8, 1, 768), (4,2 ,768) aux

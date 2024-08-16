@@ -231,48 +231,17 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
                 multi_view_offence_output = output['mv_collection']['offence_logits']
                 multi_view_action_output = output['mv_collection']['action_logits']
 
-                if len(action) == 1:
-
-                    preds_sev = torch.argmax(multi_view_offence_output, 0)  # dla video-mae
-                    preds_act = torch.argmax(multi_view_action_output, 0)
-
-                    values = {}
-
-                    values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
-                    if preds_sev.item() == 0:
-                        values["Offence"] = "No offence"
-                        values["Severity"] = ""
-                    elif preds_sev.item() == 1:
-                        values["Offence"] = "Offence"
-                        values["Severity"] = "1.0"
-                    elif preds_sev.item() == 2:
-                        values["Offence"] = "Offence"
-                        values["Severity"] = "3.0"
-                    elif preds_sev.item() == 3:
-                        values["Offence"] = "Offence"
-                        values["Severity"] = "5.0"
-                    multi_view_data["Actions"][action[0]] = values
-                else:
-
-                    preds_sev = torch.argmax(multi_view_offence_output.detach().cpu(), 1)
-                    preds_act = torch.argmax(multi_view_action_output.detach().cpu(), 1)
-
-                    for i in range(len(action)):
-                        values = {}
-                        values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act[i].item()]
-                        if preds_sev[i].item() == 0:
-                            values["Offence"] = "No offence"
-                            values["Severity"] = ""
-                        elif preds_sev[i].item() == 1:
-                            values["Offence"] = "Offence"
-                            values["Severity"] = "1.0"
-                        elif preds_sev[i].item() == 2:
-                            values["Offence"] = "Offence"
-                            values["Severity"] = "3.0"
-                        elif preds_sev[i].item() == 3:
-                            values["Offence"] = "Offence"
-                            values["Severity"] = "5.0"
-                        multi_view_data["Actions"][action[i]] = values
+                # evaluation result ...
+                for i in range(len(action)):
+                    values = {
+                        "Action class": INVERSE_EVENT_DICTIONARY["action_class"][
+                            torch.argmax(multi_view_action_output.detach().cpu(), dim=1)[i].item()]
+                    }
+                    preds_sev = torch.argmax(multi_view_offence_output.detach().cpu(), dim=1)
+                    offence, severity = OFFENCE_SEVERITY_MAP[preds_sev[i].item()]
+                    values["Offence"] = offence
+                    values["Severity"] = severity
+                    multi_view_data["Actions"][action[i]] = values
 
                 if len(multi_view_offence_output.size()) == 1:
                     multi_view_offence_output = multi_view_offence_output.unsqueeze(0)

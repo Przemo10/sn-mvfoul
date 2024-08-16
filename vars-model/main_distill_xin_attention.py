@@ -7,7 +7,7 @@ import torch
 from src.custom_loss.custom_step_lr_scheduler import  CustomStepLRScheduler
 from torch.utils.tensorboard import SummaryWriter
 from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
-from src.custom_trainers.train_xin_attention import trainer, evaluation, sklearn_evaluation
+from src.custom_trainers.train_xin_distill import trainer, evaluation, sklearn_evaluation
 from src.custom_loss.loss_selector import select_training_loss
 import torchvision.transforms as transforms
 from torch.utils.data import  DataLoader
@@ -30,12 +30,6 @@ def checkArguments():
     if args.data_aug != 'Yes' and args.data_aug != 'No':
         print("Could not find your desired argument for --args.data_aug:")
         print("Possible arguments are: Yes or No")
-        exit()
-
-    # args.pooling_type
-    if args.pooling_type != 'max' and args.pooling_type != 'mean' and args.pooling_type != 'attention':
-        print("Could not find your desired argument for --args.pooling_type:")
-        print("Possible arguments are: max or mean")
         exit()
 
     # args.weighted_loss
@@ -73,9 +67,9 @@ def main(*args):
         end_frame = args.end_frame
         weight_decay = args.weight_decay
         video_shift_aug = args.video_shift_aug
-        model_name = f"{args.model_name},_v{args.net_version}"
-        net_version = args.net_version
-        pre_model = args.pre_model
+        model_name = f"{args.model_name}_s{args.net_version_s}_t{args.net_version_t}"
+        net_version_s = args.net_version_s
+        net_version_t = args.net_version_t
         num_views = args.num_views
         fps = args.fps
         number_of_frames = int((args.end_frame - args.start_frame) / (
@@ -83,7 +77,10 @@ def main(*args):
         batch_size = args.batch_size
         data_aug = args.data_aug
         path = args.path
-        pooling_type = args.pooling_type
+        pre_model_s = args.pre_model_s
+        pre_model_t = args.pre_model_t
+        pooling_type_s = args.pooling_type_s
+        pooling_type_t = args.pooling_type_t
         weighted_loss = args.weighted_loss
         weight_exp_alpha = args.weight_exp_alpha
         weight_exp_bias = args.weight_exp_bias
@@ -93,9 +90,9 @@ def main(*args):
         ce_weight = args.ce_weight
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
-        continue_training = args.continue_training
         only_evaluation = args.only_evaluation
-        path_to_model_weights = args.path_to_model_weights
+        path_to_model_weights_s = args.path_to_model_weights_s
+        path_to_model_weights_t = args.path_to_model_weights_t
     else:
         print("EXIT")
         exit()
@@ -105,12 +102,12 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    output_dir_name = f"{LR}_{weighted_loss}/B_{batch_size}F{number_of_frames}_G{gamma}_S{step_size}_mv{net_version}_p{pooling_type}"
-
+    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_mv{net_version_s}"
+    model_output_dirname = f"{model_output_dirname}_t{pre_model_t}_s{pre_model_s}"
     best_model_path = os.path.join(
         "models",
         os.path.join(model_name,
-                     os.path.join(str(num_views), os.path.join(pre_model, os.path.join(output_dir_name)))
+                     os.path.join(str(num_views), os.path.join(pre_model_s, os.path.join(model_output_dirname)))
                      )
     )
     os.makedirs(best_model_path, exist_ok=True)
@@ -137,20 +134,20 @@ def main(*args):
     else:
         transformAug = None
 
-    if pre_model == "r3d_18":
+    if pre_model_s == "r3d_18":
         transforms_model = R3D_18_Weights.KINETICS400_V1.transforms()
-    elif pre_model == "s3d":
+    elif pre_model_s == "s3d":
         transforms_model = S3D_Weights.KINETICS400_V1.transforms()
-    elif pre_model == "mc3_18":
+    elif pre_model_s == "mc3_18":
         transforms_model = MC3_18_Weights.KINETICS400_V1.transforms()
-    elif pre_model == "r2plus1d_18":
+    elif pre_model_s == "r2plus1d_18":
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
-    elif pre_model == "mvit_v2_s":
+    elif pre_model_s == "mvit_v2_s":
         transforms_model = MViT_V2_S_Weights.KINETICS400_V1.transforms()
-    elif pre_model == "swin3d_s":
+    elif pre_model_s == "swin3d_s":
         transforms_model = Swin3D_S_Weights.KINETICS400_V1.transforms()
         print("swin3d_s")
-    elif pre_model == "swin3d_t":
+    elif pre_model_s == "swin3d_t":
         transforms_model = Swin3D_T_Weights.KINETICS400_V1.transforms()
     else:
         transforms_model = R2Plus1D_18_Weights.KINETICS400_V1.transforms()
@@ -212,18 +209,19 @@ def main(*args):
     ###################################
     #       LOADING THE MODEL         #
     ###################################
-    xin_network = XIN_NET_VERSION.get(net_version)
-    print(xin_network, pooling_type)
-    model = xin_network(num_views=num_views, net_name = pre_model, agr_type = pooling_type).cuda()
+    xin_network = XIN_NET_VERSION.get(net_version_s)
+    print(xin_network, pooling_type_s)
+    student_model = xin_network(num_views=num_views, net_name = pre_model_s, agr_type = pooling_type_s).cuda()
 
-    if path_to_model_weights != "":
-        path_model = os.path.join(path_to_model_weights)
+    if path_to_model_weights_s != "":
+        path_model = os.path.join(path_to_model_weights_s)
         load = torch.load(path_model)
-        model.load_state_dict(load['state_dict'])
+        student_model.load_state_dict(load['state_dict'])
+        print("Weights student has been read.")
 
     if only_evaluation == 3:
 
-        optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
+        optimizer = torch.optim.AdamW(student_model.parameters(), lr=LR,
                                       betas=(0.92, 0.999), eps=1e-07,
                                       weight_decay=weight_decay, amsgrad=False)
 
@@ -231,14 +229,14 @@ def main(*args):
         #scheduler = CustomStepLRScheduler(optimizer, step_size=step_size, gamma=gamma)
         epoch_start = 0
 
-        if continue_training:
-            print(2048)
-            path_model = os.path.join(log_path, 'model.pth.tar')
+        xin_network = XIN_NET_VERSION.get(net_version_t)
+
+        teacher_model = xin_network(num_views=num_views, net_name = pre_model_s, agr_type = pooling_type_t).cuda()
+        if path_to_model_weights_t != "":
+            path_model = os.path.join(path_to_model_weights_t)
             load = torch.load(path_model)
-            model.load_state_dict(load['state_dict'])
-            optimizer.load_state_dict(load['optimizer'])
-            scheduler.load_state_dict(load['scheduler'])
-            epoch_start = load['epoch']
+            teacher_model.load_state_dict(load['state_dict'])
+            print("Weights teacher has been read.")
 
         criterion = select_training_loss(
             weighted_loss=weighted_loss,
@@ -248,14 +246,25 @@ def main(*args):
             ce_weight=ce_weight,
         )
 
-        run_label = output_dir_name.replace("/", "_")
+        run_label = model_output_dirname.replace("/", "_")
         current_date = datetime.now().strftime("%Y%b%d_%H%M")
-        writer = SummaryWriter(f"runs/{current_date}_Xin{net_version}_attention_{model_name}_{pre_model}_{run_label}")
+        writer = SummaryWriter(f"runs/{current_date}_Xin_Distill_t{net_version_t}_s{net_version_s}_attention_{model_name}_{pre_model_s}_{run_label}")
         start_time = time.time()
         leadearboard_summary = trainer(
-            train_loader, val_loader2, test_loader2, model, optimizer, scheduler, criterion,
-            best_model_path, epoch_start, model_name=model_name, path_dataset=path, max_epochs=max_epochs,
-            writer=writer, patience= args.patience
+            train_loader, val_loader2, test_loader2,
+            teacher_offence_model=teacher_model,
+            teacher_action_model = student_model, student_model=student_model,
+            optimizer=optimizer,
+            scheduler=scheduler,
+            criterion=criterion,
+            best_model_path=best_model_path,
+            epoch_start=epoch_start,
+            model_name=model_name,
+            path_dataset=path,
+            max_epochs=max_epochs,
+            writer=writer, patience= args.patience,
+            kdl_temp= args.kdl_temp,
+            kdl_lambda = args.kdl_lambda
         )
         end_time = time.time()
         leadearboard_summary["training_time"] = round((end_time - start_time) / 3600, 4)
@@ -268,16 +277,16 @@ def main(*args):
         writer.add_hparams(hyperparams, leadearboard_summary)
         writer.close()
         print(f"Training finished. Training time:{leadearboard_summary['training_time']}")
-
+        
     if only_evaluation == 0:
         print("Only evaluation 0")
         evaluation_results = sklearn_evaluation(
-            test_loader2, model, set_name="test", model_name = model_name,
+            test_loader2, student_model, set_name="test", model_name = model_name,
         )
         print(evaluation_results)
         prediction_file = evaluation(
             test_loader2,
-            model,
+            student_model,
             set_name="test",
         )
         results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
@@ -287,20 +296,20 @@ def main(*args):
     elif only_evaluation == 4:
         print("Only evaluation 4")
         evaluation_results = sklearn_evaluation(
-            train_loader, model, set_name="train", model_name = model_name,
+            train_loader, student_model, set_name="train", model_name = model_name,
         )
         print(evaluation_results)
         evaluation_results = sklearn_evaluation(
-            val_loader2, model, set_name="valid", model_name = model_name,
+            val_loader2, student_model, set_name="valid", model_name = model_name,
         )
         print(evaluation_results)
         evaluation_results = sklearn_evaluation(
-            test_loader2, model, set_name="test", model_name = model_name,
+            test_loader2, student_model, set_name="test", model_name = model_name,
         )
         print(evaluation_results)
         prediction_file = evaluation(
             test_loader2,
-            model,
+            student_model,
             set_name="test",
         )
         results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
@@ -326,11 +335,16 @@ if __name__ == '__main__':
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
     parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
-    parser.add_argument("--pre_model", required=False, type=str, default="mvit_v2_s",
+    parser.add_argument("--pre_model_s", required=False, type=str, default="mvit_v2_s",
                         help="Name of the pretrained model")
-    parser.add_argument("--net_version", required=False, type=int, default=3, help="XinNetVersion")
-    parser.add_argument("--pooling_type", required=False, type=str, default="max",
-                        help="Which type of pooling should be done")
+    parser.add_argument("--pre_model_t", required=False, type=str, default="mvit_v2_s",
+                        help="Name of the pretrained model")
+    parser.add_argument("--net_version_s", required=False, type=int, default=25, help="MvAggregateModelVersion")
+    parser.add_argument("--net_version_t", required=False, type=int, default=25, help="MvAggregateModelVersion")
+    parser.add_argument("--pooling_type_s", required=False, type=str, default="attention",
+                        help="Student model pooling type")
+    parser.add_argument("--pooling_type_t", required=False, type=str, default="attention",
+                        help="Teacher model pooling type")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base",
                         help="Weighted loss version")
     parser.add_argument("--weight_exp_alpha", required=False, type=float, default=6.0,
@@ -351,8 +365,12 @@ if __name__ == '__main__':
     parser.add_argument("--patience", required=False, type=int, default=15, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
-    parser.add_argument("--path_to_model_weights", required=False, type=str, default="",
-                        help="Path to the model weights")
+    parser.add_argument("--kdl_temp", required=False, type=float, default=4.0, help="distill_temp")
+    parser.add_argument("--kdl_lambda", required=False, type=float, default=10, help="Weight decacy")
+    parser.add_argument("--path_to_model_weights_s", required=True, type=str, default="",
+                        help="Path to the student weights")
+    parser.add_argument("--path_to_model_weights_t", required=False, type=str, default="",
+                        help="Path to the teacher weights")
 
     args = parser.parse_args()
 

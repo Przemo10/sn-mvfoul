@@ -10,7 +10,7 @@ class DistillationLoss(nn.Module):
 
         super(DistillationLoss, self).__init__()
         self.temp = kld_temp
-        self.kl_div = nn.KLDivLoss()
+        self.kl_div = nn.KLDivLoss(reduction='batchmean')
         self.lambda_hyperparam = kld_lambda
 
     def forward(self, teacher_logits, student_logits ):

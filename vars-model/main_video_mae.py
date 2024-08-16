@@ -34,7 +34,7 @@ def checkArguments():
         exit()
 
     # args.weighted_loss
-    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE","BaseExp"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE","BaseExp","WeightedFocal"]:
         print("Could not find your desired argument for --args.weighted_loss:")
         print("Possible arguments are: Base, No, Exp")
         exit()
@@ -265,7 +265,7 @@ if __name__ == '__main__':
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=3, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.1, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.05, help="Weight decacy")
+    parser.add_argument("--weight_decay", required=False, type=float, default=5e-6, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=20, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

@@ -4,7 +4,6 @@ import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from pyarrow.dataset import dataset
 from transformers.models.pop2piano.convert_pop2piano_weights_to_hf import model
 from src.custom_loss.loss_selector import select_training_loss
 from src.custom_dataset.baseline_dataset import MultiViewDataset

@@ -1,23 +1,25 @@
-import logging
 import os
 import torch
-from torch.utils.tensorboard import SummaryWriter
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
-from tqdm import tqdm
 from src.soccernet_evaluate import evaluate
+from tqdm import tqdm
+import logging
+from config.label_map import OFFENCE_SEVERITY_MAP
 from sklearn.metrics import confusion_matrix, classification_report
-import numpy as np
 from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
 from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
+import numpy as np
 from src.custom_trainers.training_history import save_training_history, get_leaderboard_summary
 from src.custom_loss.distill_loss import DistillationLoss
+
 
 def trainer(train_loader,
             val_loader2,
             test_loader2,
-            teacher_model,
+            teacher_offence_model,
+            teacher_action_model,
             student_model,
             optimizer,
             scheduler,
@@ -39,7 +41,6 @@ def trainer(train_loader,
 
     for epoch in range(epoch_start, max_epochs):
 
-
         print(f"Epoch {epoch + 1}/{max_epochs}")
 
         # Create a progress bar
@@ -48,7 +49,8 @@ def trainer(train_loader,
         ###################### TRAINING ###################
         prediction_file, loss_action, loss_offence_severity, loss_kd = train(
             train_loader,
-            teacher_model,
+            teacher_offence_model,
+            teacher_action_model,
             student_model,
             criterion,
             optimizer,
@@ -70,7 +72,8 @@ def trainer(train_loader,
         ###################### VALIDATION ###################
         prediction_file, loss_action, loss_offence_severity, loss_kd = train(
             val_loader2,
-            teacher_model,
+            teacher_offence_model,
+            teacher_action_model,
             student_model,
             criterion,
             optimizer,
@@ -85,15 +88,16 @@ def trainer(train_loader,
 
         valid_results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
         print(
-            f"VALID: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)}, "
-            f"loss_distil: {round(kd_loss, 10)}")
+            f"VALIDATION: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)},"
+            f" loss_distil: {round(loss_kd, 10)}")
         print(valid_results)
         valid_epoch_leaderboard = valid_results["leaderboard_value"]
 
         ###################### TEST ###################
         prediction_file, loss_action, loss_offence_severity, loss_kd = train(
             test_loader2,
-            teacher_model,
+            teacher_offence_model,
+            teacher_action_model,
             student_model,
             criterion,
             optimizer,
@@ -108,7 +112,7 @@ def trainer(train_loader,
 
         test_results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
         print(
-            f"TEST loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)},"
+            f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)},"
             f" loss_distil: {round(loss_kd, 10)}")
         print(test_results)
         test_epoch_leaderboard = test_results["leaderboard_value"]
@@ -119,17 +123,17 @@ def trainer(train_loader,
             writer.add_scalars(
                 f"Metric/train",
                 train_results,
-                epoch+1
+                epoch + 1
             )
             writer.add_scalars(
                 f"Metric/valid",
                 valid_results,
-                epoch+1
+                epoch + 1
             )
             writer.add_scalars(
                 f"Metric/test",
                 test_results,
-                epoch+1
+                epoch + 1
             )
 
         update_epoch_results_dict("train", train_results)
@@ -181,9 +185,9 @@ def trainer(train_loader,
 
     return leaderboard_summary
 
-
 def train(dataloader,
-          teacher_model,
+          teacher_offence_model,
+          teacher_action_model,
           student_model,
           criterion,
           optimizer,
@@ -196,18 +200,21 @@ def train(dataloader,
           scheduler=None,
           writer=None,
           ):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # switch to train mode
+
     if train:
         student_model.train()
     else:
         student_model.eval()
 
-    teacher_model.eval()
-
+    teacher_offence_model.eval()
+    teacher_action_model.eval()
 
     loss_total_action = 0
     loss_total_offence_severity = 0
-    loss_total_kd= 0
+    loss_total_kd = 0
     loss_total_kd_action = 0
     loss_total_kd_offence_severity = 0
     total_loss = 0
@@ -215,29 +222,33 @@ def train(dataloader,
     if not os.path.isdir(model_name):
         os.mkdir(model_name)
 
-        # path where we will save the results
-    prediction_file = f"predicitions_{set_name}_epoch_{epoch}.json"
+    # paths where we will save the results
+    single_prediction_file = f"single_predictions_{set_name}_epoch_{epoch}.json"
+    multi_view_prediction_file = f"multi_view_predictions_{set_name}_epoch_{epoch}.json"
 
-    data = {}
-    data["Set"] = set_name
-
-    actions = {}
+    # single_data = {"Set": set_name, "Actions": {}}
+    multi_view_data = {"Set": set_name, "Actions": {}}
 
     with torch.set_grad_enabled(train):
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
+            single_view_loss_action = torch.tensor(0.0, device=device)
+            single_view_loss_offence_severity = torch.tensor(0.0, device=device)
 
-            targets_offence_severity = targets_offence_severity.cuda()
-            targets_action = targets_action.cuda()
-            mvclips = mvclips.cuda().float()
+            targets_offence_severity = targets_offence_severity.to(device)
+            targets_action = targets_action.to(device)
+            mvclips = mvclips.to(device).float()
 
             if pbar is not None:
                 pbar.update()
 
             # compute output
-            student_outputs_offence_severity, student_outputs_action, _ = student_model(mvclips)
+            student_outputs = student_model(mvclips)
+            student_outputs_offence_severity = student_outputs['mv_collection']['offence_logits']
+            student_outputs_action= student_outputs['mv_collection']['action_logits']
 
             with torch.no_grad():
-                teacher_outputs_offence_severity, teacher_outputs_action, _ = teacher_model(mvclips)
+                teacher_outputs_offence_severity = teacher_offence_model(mvclips)['mv_collection']['offence_logits']
+                teacher_outputs_action = teacher_action_model(mvclips)['mv_collection']['action_logits']
 
             if len(action) == 1:
 
@@ -260,7 +271,7 @@ def train(dataloader,
                 elif preds_sev.item() == 3:
                     values["Offence"] = "Offence"
                     values["Severity"] = "5.0"
-                actions[action[0]] = values
+                multi_view_data["Actions"][action[0]] = values
             else:
 
                 preds_sev = torch.argmax(student_outputs_offence_severity.detach().cpu(), 1)
@@ -281,7 +292,7 @@ def train(dataloader,
                     elif preds_sev[i].item() == 3:
                         values["Offence"] = "Offence"
                         values["Severity"] = "5.0"
-                    actions[action[i]] = values
+                    multi_view_data["Actions"][action[i]] = values
 
             if len(student_outputs_offence_severity.size()) == 1:
                 student_outputs_offence_severity = student_outputs_offence_severity.unsqueeze(0)
@@ -296,7 +307,7 @@ def train(dataloader,
 
             loss_kd_offence_severity = kd_loss(teacher_outputs_offence_severity, student_outputs_offence_severity)
             loss_kd_action = kd_loss(teacher_outputs_action, student_outputs_action)
-            loss_knowledge_distillation  = loss_kd_action + loss_kd_offence_severity
+            loss_knowledge_distillation = loss_kd_action + loss_kd_offence_severity
 
             loss = loss_offence_severity + loss_action + loss_knowledge_distillation
 
@@ -304,7 +315,7 @@ def train(dataloader,
                 # compute gradient and do SGD step
                 optimizer.zero_grad()
                 loss.backward()
-                #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
             loss_total_action += float(loss_action)
@@ -321,18 +332,17 @@ def train(dataloader,
                         f"total kld - {model_name}": loss_total_kd,
                     },
                     epoch + 1
-            )
+                )
 
-        gc.collect()
-        torch.cuda.empty_cache()
+    gc.collect()
+    torch.cuda.empty_cache()
 
-    data["Actions"] = actions
-    with open(os.path.join(model_name, prediction_file), "w") as outfile:
-        json.dump(data, outfile)
-    return (os.path.join(model_name, prediction_file),
+    with open(os.path.join(model_name, multi_view_prediction_file), 'w') as f:
+        json.dump(multi_view_data, f, indent=4)
+    return (os.path.join(model_name, multi_view_prediction_file),
             loss_total_action / total_loss,
             loss_total_offence_severity / total_loss,
-            loss_total_kd / total_loss
+            loss_total_kd/total_loss
             )
 
 
@@ -341,7 +351,7 @@ def sklearn_evaluation(dataloader,
                        model_name="",
                        set_name="train",
                        ):
-    prediction_file = "sklearn_summary_" + model_name + "_" + set_name + ".json"
+    prediction_file = "sklearn_summary_xin_attention_" + model_name + "_" + set_name + ".json"
 
     model.eval()
     offence_labels = ["No offence", "Offence-no card", "Offence yellow", "Offence red"]
@@ -359,22 +369,22 @@ def sklearn_evaluation(dataloader,
             targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
             targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
             mvclips = mvclips.cuda().float()
-            outputs_offence_severity, outputs_action, _ = model(mvclips)
-            if len(action) == 1:
-                preds_sev = torch.argmax(outputs_offence_severity, 0)
-                preds_act = torch.argmax(outputs_action, 0)
-                # add elements into list
-                targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
-                targets_action_list.extend(targets_action_int_or_list)
-                pred_offence_list.append(preds_sev.detach().cpu().numpy().tolist())
-                pred_action_list.append(preds_act.cpu().numpy().tolist())
-            else:
-                preds_sev = torch.argmax(outputs_offence_severity, 1)
-                preds_act = torch.argmax(outputs_action, 1)
-                targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
-                targets_action_list.extend(targets_action_int_or_list)
-                pred_offence_list.extend(preds_sev.detach().cpu().numpy().tolist())
-                pred_action_list.extend(preds_act.cpu().numpy().tolist())
+            output = model(mvclips)
+            outputs_offence_severity = output['mv_collection']['offence_logits']
+            outputs_action = output['mv_collection']['action_logits']
+            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
+            targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
+            mvclips = mvclips.cuda().float()
+            output = model(mvclips)
+            outputs_offence_severity = output['mv_collection']['offence_logits']
+            outputs_action = output['mv_collection']['action_logits']
+            preds_sev = torch.argmax(outputs_offence_severity, 1)
+            preds_act = torch.argmax(outputs_action, 1)
+            targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
+            targets_action_list.extend(targets_action_int_or_list)
+            pred_offence_list.extend(preds_sev.detach().cpu().numpy().tolist())
+            pred_action_list.extend(preds_act.cpu().numpy().tolist())
+
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -385,8 +395,6 @@ def sklearn_evaluation(dataloader,
     cm_offence = confusion_matrix(
         targets_offence_severity_map_list, preds_offence_map_list, labels=offence_labels
     ).tolist()
-
-    print("**********")
 
     cm_action = confusion_matrix(
         targets_action_map_list, preds_action_map_list, labels=action_labels
@@ -409,29 +417,26 @@ def sklearn_evaluation(dataloader,
         json.dump(data, outfile)
 
 
-# Evaluation function to evaluate the test or the chall set
 def evaluation(dataloader,
                model,
                set_name="test",
                ):
     model.eval()
 
-    prediction_file = f"predicitions_{set_name}.json"
-    data = {}
-    data["Set"] = set_name
-
-    actions = {}
+    multi_view_prediction_file = f"multi_view_predictions_{set_name}.json"
+    multi_view_data = {"Set": set_name, "Actions": {}}
 
     if True:
         for _, _, mvclips, action in dataloader:
 
             mvclips = mvclips.cuda().float()
             # mvclips = mvclips.float()
-            outputs_offence_severity, outputs_action, _ = model(mvclips)
-
+            output = model(mvclips)
+            multi_view_offence_output = output['mv_collection']['offence_logits']
+            multi_view_action_output = output['mv_collection']['action_logits']
             if len(action) == 1:
-                preds_sev = torch.argmax(outputs_offence_severity, 0)
-                preds_act = torch.argmax(outputs_action, 0)
+                preds_sev = torch.argmax(multi_view_offence_output, 0)
+                preds_act = torch.argmax(multi_view_action_output, 0)
 
                 values = {}
                 values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
@@ -447,10 +452,10 @@ def evaluation(dataloader,
                 elif preds_sev.item() == 3:
                     values["Offence"] = "Offence"
                     values["Severity"] = "5.0"
-                actions[action[0]] = values
+                multi_view_data["Actions"][action[0]] = values
             else:
-                preds_sev = torch.argmax(outputs_offence_severity.detach().cpu(), 1)
-                preds_act = torch.argmax(outputs_action.detach().cpu(), 1)
+                preds_sev = torch.argmax(multi_view_offence_output .detach().cpu(), 1)
+                preds_act = torch.argmax(multi_view_action_output.detach().cpu(), 1)
 
                 for i in range(len(action)):
                     values = {}
@@ -467,12 +472,11 @@ def evaluation(dataloader,
                     elif preds_sev[i].item() == 3:
                         values["Offence"] = "Offence"
                         values["Severity"] = "5.0"
-                    actions[action[i]] = values
+                    multi_view_data["Actions"][action[i]] = values
 
         gc.collect()
         torch.cuda.empty_cache()
 
-    data["Actions"] = actions
-    with open(prediction_file, "w") as outfile:
-        json.dump(data, outfile)
-    return prediction_file
+    with open(multi_view_prediction_file, "w") as outfile:
+        json.dump(multi_view_data, outfile)
+    return multi_view_prediction_file

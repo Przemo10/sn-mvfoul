@@ -28,7 +28,7 @@ def checkArguments():
         print("Possible arguments are: Yes or No")
         exit()
     # args.weighted_loss
-    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp", "WeightedFocal"]:
         print("Could not find your desired argument for --args.weighted_loss:")
         print("Possible arguments are: Base, No, Exp, Yes, Focal, FocalCE")
         exit()
@@ -213,14 +213,14 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
-                                      betas=(0.85, 0.95), eps=1e-04,
+                                      betas=(0.9, 0.96), eps=1e-08,
                                       weight_decay=weight_decay, amsgrad=False)
 
         #  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
         scheduler = torch.optim.lr_scheduler.OneCycleLR(
             optimizer=optimizer,
             pct_start=0.3,
-            final_div_factor=10000,
+            final_div_factor=1000,
             max_lr = LR,
             steps_per_epoch = len(train_loader),
             epochs=max_epochs,
@@ -306,9 +306,9 @@ if __name__ == '__main__':
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=0, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0, help="StepLR parameter")
-    parser.add_argument("--distil_temp", required=False, type=int, default=1, help="distil temp")
-    parser.add_argument("--distil_lambda", required=False, type=float, default=10, help="dill lambda")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.0001, help="Weight decacy")
+    parser.add_argument("--distil_temp", required=False, type=int, default=2, help="distil temp")
+    parser.add_argument("--distil_lambda", required=False, type=float, default=5, help="dill lambda")
+    parser.add_argument("--weight_decay", required=False, type=float, default=1e-7, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=10, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

@@ -90,13 +90,14 @@ class XinMultimodalNetN15(torch.nn.Module):
         else:
             self.model = network
         self.num_views = num_views
-        self.feat_dim = 400
+        self.model.head = nn.Identity()
+        self.feat_dim = 256
         self.token_dim = 768
-        self.drop_layer = nn.Dropout(0.2)
         self.drop_block = nn.Sequential(
             nn.Dropout(0.2),
-            nn.Linear(self.feat_dim, self.feat_dim),
+            nn.Linear(self.token_dim, self.feat_dim),
             nn.LayerNorm(self.feat_dim),
+            nn.Dropout(0.2),
         )
         self.lifting_net = nn.Sequential()
         self.aggregation_model = select_pooling_attention(
@@ -113,11 +114,14 @@ class XinMultimodalNetN15(torch.nn.Module):
             nn.Linear(self.feat_dim, 8)
         )
         self.intern = nn.Sequential(
-            nn.Linear(self.feat_dim,  self.feat_dim),
+            nn.Linear(self.feat_dim, self.feat_dim),
+            nn.ReLU(),
             nn.LayerNorm(self.feat_dim),
+            nn.Dropout(0.2)
         )
         self.fc_mv_offence = nn.Linear(self.feat_dim, 4)
         self.fc_mv_actions = nn.Linear(self.feat_dim, 8)
+
     def freezee_net_layer(self, network):
         freeze = True
         for name, param in network.named_parameters():
@@ -136,7 +140,7 @@ class XinMultimodalNetN15(torch.nn.Module):
         features_extractor_list = []
         for i in range(V):
             aux = self.lifting_net(self.model(mvimages[:, i]))
-            x = self.drop_layer(aux)
+            x = self.drop_block(aux)
             # print(x.shape)
             single_offence = self.fc_offence(x)
             single_action = self.fc_action(x)
