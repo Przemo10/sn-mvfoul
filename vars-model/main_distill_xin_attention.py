@@ -67,7 +67,7 @@ def main(*args):
         end_frame = args.end_frame
         weight_decay = args.weight_decay
         video_shift_aug = args.video_shift_aug
-        model_name = f"{args.model_name}_s{args.net_version_s}_t{args.net_version_t}"
+        model_name = f"{args.model_name}_s{args.net_version_s}_t{args.net_version_t}_kd_{args.kd_temp}_{args.kd_lambda}"
         net_version_s = args.net_version_s
         net_version_t = args.net_version_t
         num_views = args.num_views
@@ -85,14 +85,13 @@ def main(*args):
         weight_exp_alpha = args.weight_exp_alpha
         weight_exp_bias = args.weight_exp_bias
         weight_exp_gamma = args.weight_exp_gamma
-        focal_alpha = args.focal_alpha,
-        focal_gamma = args.focal_gamma,
+        focal_alpha = args.focal_alpha
+        focal_gamma = args.focal_gamma
         ce_weight = args.ce_weight
         max_num_worker = args.max_num_worker
         max_epochs = args.max_epochs
         only_evaluation = args.only_evaluation
         path_to_model_weights_s = args.path_to_model_weights_s
-        path_to_model_weights_t = args.path_to_model_weights_t
     else:
         print("EXIT")
         exit()
@@ -102,7 +101,7 @@ def main(*args):
     if not isinstance(numeric_level, int):
         raise ValueError('Invalid log level: %s' % 'INFO')
 
-    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_Step{step_size}_mv{net_version_s}"
+    model_output_dirname = f"{LR}/B_{batch_size}F{number_of_frames}_G{gamma}_S{step_size}_mv{net_version_s}"
     model_output_dirname = f"{model_output_dirname}_t{pre_model_t}_s{pre_model_s}"
     best_model_path = os.path.join(
         "models",
@@ -218,6 +217,8 @@ def main(*args):
         load = torch.load(path_model)
         student_model.load_state_dict(load['state_dict'])
         print("Weights student has been read.")
+    else:
+        print("Training student from scratch.")
 
     if only_evaluation == 3:
 
@@ -229,14 +230,24 @@ def main(*args):
         #scheduler = CustomStepLRScheduler(optimizer, step_size=step_size, gamma=gamma)
         epoch_start = 0
 
+        teacher_model_path_list = [
+            "models/VARS_XIN_reg01_bq23,_v25/5/mvit_v2_s/5e-05_WeightedFocal/B_4F16_G0.5_S3_mv25_pattention/11_model.pth.tar",
+            "models/VARS_XIN_reg01_bq23b,_v25/5/mvit_v2_s/5e-05_WeightedFocal/B_4F16_G0.5_S3_mv25_pattention/14_model.pth.tar",
+            "models/VARS_XIN_reg01_new_cs,_v25/5/mvit_v2_s/5e-05_WeightedFocal/B_4F16_G0.5_S3_mv25_pattention/26_model.pth.tar"
+        ]
+        teacher_models_list = []
+
         xin_network = XIN_NET_VERSION.get(net_version_t)
 
         teacher_model = xin_network(num_views=num_views, net_name = pre_model_s, agr_type = pooling_type_t).cuda()
-        if path_to_model_weights_t != "":
+
+        for path_to_model_weights_t in teacher_model_path_list:
             path_model = os.path.join(path_to_model_weights_t)
             load = torch.load(path_model)
             teacher_model.load_state_dict(load['state_dict'])
-            print("Weights teacher has been read.")
+            teacher_model.eval()
+            print(f"Weights teacher {path_to_model_weights_t} has been read.")
+            teacher_models_list.append(teacher_model)
 
         criterion = select_training_loss(
             weighted_loss=weighted_loss,
@@ -252,8 +263,8 @@ def main(*args):
         start_time = time.time()
         leadearboard_summary = trainer(
             train_loader, val_loader2, test_loader2,
-            teacher_offence_model=teacher_model,
-            teacher_action_model = student_model, student_model=student_model,
+            teacher_models_list=teacher_models_list,
+            student_model=student_model,
             optimizer=optimizer,
             scheduler=scheduler,
             criterion=criterion,
@@ -263,8 +274,8 @@ def main(*args):
             path_dataset=path,
             max_epochs=max_epochs,
             writer=writer, patience= args.patience,
-            kdl_temp= args.kdl_temp,
-            kdl_lambda = args.kdl_lambda
+            kd_temp = args.kd_temp,
+            kd_lambda = args.kd_lambda
         )
         end_time = time.time()
         leadearboard_summary["training_time"] = round((end_time - start_time) / 3600, 4)
@@ -316,7 +327,6 @@ def main(*args):
         print("TEST")
         print(results)
 
-
     return 0
 
 
@@ -325,7 +335,7 @@ if __name__ == '__main__':
     parser = ArgumentParser(description='my method', formatter_class=ArgumentDefaultsHelpFormatter)
     parser.add_argument('--path', required=True, type=str, help='Path to the dataset folder')
     parser.add_argument('--max_epochs', required=False, type=int, default=60, help='Maximum number of epochs')
-    parser.add_argument('--model_name', required=False, type=str, default="Xin_VAR2", help='named of the model to save')
+    parser.add_argument('--model_name', required=False, type=str, default="Xin_DISTILL", help='named of the model to save')
     parser.add_argument('--batch_size', required=False, type=int, default=2, help='Batch size')
     parser.add_argument('--LR', required=False, type=float, default=1e-04, help='Learning Rate')
     parser.add_argument('--GPU', required=False, type=int, default=-1, help='ID of the GPU to use')
@@ -361,16 +371,13 @@ if __name__ == '__main__':
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=1e-5, help="Weight decacy")
+    parser.add_argument("--weight_decay", required=False, type=float, default=1e-3, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=15, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
-    parser.add_argument("--kdl_temp", required=False, type=float, default=4.0, help="distill_temp")
-    parser.add_argument("--kdl_lambda", required=False, type=float, default=10, help="Weight decacy")
-    parser.add_argument("--path_to_model_weights_s", required=True, type=str, default="",
-                        help="Path to the student weights")
-    parser.add_argument("--path_to_model_weights_t", required=False, type=str, default="",
-                        help="Path to the teacher weights")
+    parser.add_argument("--path_to_model_weights_s", required=False, type=str, default="", help="Path to the student weights")
+    parser.add_argument("--kd_temp", required=False, type=float, default=4.0, help="distill_temp")
+    parser.add_argument("--kd_lambda", required=False, type=float, default=0.5,  help="Weight decacy")
 
     args = parser.parse_args()
 

@@ -6,6 +6,7 @@ import json
 from src.soccernet_evaluate import evaluate
 from tqdm import tqdm
 import logging
+import torch.nn.functional as F
 from config.label_map import OFFENCE_SEVERITY_MAP
 from sklearn.metrics import confusion_matrix, classification_report
 from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
@@ -14,12 +15,10 @@ import numpy as np
 from src.custom_trainers.training_history import save_training_history, get_leaderboard_summary
 from src.custom_loss.distill_loss import DistillationLoss
 
-
 def trainer(train_loader,
             val_loader2,
             test_loader2,
-            teacher_offence_model,
-            teacher_action_model,
+            teacher_models_list,
             student_model,
             optimizer,
             scheduler,
@@ -31,13 +30,13 @@ def trainer(train_loader,
             max_epochs=1000,
             patience = 10,
             writer=None,
-            kdl_temp=4.0,
-            kdl_lambda = 0.1
+            kd_lambda = 0.5,
+            kd_temp = 4
             ):
     logging.info("start training")
     counter = 0
     patience_counter = patience
-    kd_loss  = DistillationLoss(kld_temp=kdl_temp , kld_lambda= kdl_lambda)
+    kdl_loss = DistillationLoss(kld_temp=kd_temp, kld_lambda=kd_lambda)
 
     for epoch in range(epoch_start, max_epochs):
 
@@ -47,10 +46,9 @@ def trainer(train_loader,
         pbar = tqdm(total=len(train_loader), desc="Training", position=0, leave=True)
 
         ###################### TRAINING ###################
-        prediction_file, loss_action, loss_offence_severity, loss_kd = train(
+        prediction_file, loss_action, loss_offence_severity, loss_kdl = train(
             train_loader,
-            teacher_offence_model,
-            teacher_action_model,
+            teacher_models_list,
             student_model,
             criterion,
             optimizer,
@@ -59,21 +57,21 @@ def trainer(train_loader,
             train=True,
             set_name="train",
             pbar=pbar,
-            kd_loss=kd_loss,
             scheduler=scheduler,
             writer=writer,
+            kdl_loss= kdl_loss,
+            kd_lambda=kd_lambda
         )
 
         train_results = evaluate(os.path.join(path_dataset, "train", "annotations.json"), prediction_file)
         print(
             f"TRAINING: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)},"
-            f" loss_distil: {round(loss_kd, 10)}")
+            f" loss_kdl: {round(loss_kdl, 6)}")
         print(train_results)
         ###################### VALIDATION ###################
-        prediction_file, loss_action, loss_offence_severity, loss_kd = train(
+        prediction_file, loss_action, loss_offence_severity,  loss_kdl = train(
             val_loader2,
-            teacher_offence_model,
-            teacher_action_model,
+            teacher_models_list,
             student_model,
             criterion,
             optimizer,
@@ -81,23 +79,23 @@ def trainer(train_loader,
             model_name,
             train=False,
             set_name="valid",
-            kd_loss=kd_loss,
             scheduler=scheduler,
             writer=writer,
+            kdl_loss=kdl_loss,
+            kd_lambda = kd_lambda
         )
 
         valid_results = evaluate(os.path.join(path_dataset, "valid", "annotations.json"), prediction_file)
         print(
             f"VALIDATION: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)},"
-            f" loss_distil: {round(loss_kd, 10)}")
+            f" loss_kdl: {round(loss_kdl, 6)}")
         print(valid_results)
         valid_epoch_leaderboard = valid_results["leaderboard_value"]
 
         ###################### TEST ###################
-        prediction_file, loss_action, loss_offence_severity, loss_kd = train(
+        prediction_file, loss_action, loss_offence_severity,  loss_kdl = train(
             test_loader2,
-            teacher_offence_model,
-            teacher_action_model,
+            teacher_models_list,
             student_model,
             criterion,
             optimizer,
@@ -105,15 +103,17 @@ def trainer(train_loader,
             model_name,
             train=False,
             set_name="test",
-            kd_loss=kd_loss,
             scheduler=scheduler,
             writer=writer,
+            kdl_loss=kdl_loss,
+            kd_lambda=kd_lambda
+
         )
 
         test_results = evaluate(os.path.join(path_dataset, "test", "annotations.json"), prediction_file)
         print(
             f"TEST: loss_action: {round(loss_action, 6)}, loss_offence: {round(loss_offence_severity, 6)},"
-            f" loss_distil: {round(loss_kd, 10)}")
+            f" loss_kdl: {round(loss_kdl, 6)}")
         print(test_results)
         test_epoch_leaderboard = test_results["leaderboard_value"]
 
@@ -186,8 +186,7 @@ def trainer(train_loader,
     return leaderboard_summary
 
 def train(dataloader,
-          teacher_offence_model,
-          teacher_action_model,
+          teacher_models_list,
           student_model,
           criterion,
           optimizer,
@@ -196,9 +195,10 @@ def train(dataloader,
           train=False,
           set_name="train",
           pbar=None,
-          kd_loss=None,
           scheduler=None,
           writer=None,
+          kdl_loss = None,
+          kd_lambda = 0
           ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -209,15 +209,15 @@ def train(dataloader,
     else:
         student_model.eval()
 
-    teacher_offence_model.eval()
-    teacher_action_model.eval()
+    for teacher_model in teacher_models_list:
+        teacher_model.eval()
+
+    ce_weight = 1 - kd_lambda
 
     loss_total_action = 0
     loss_total_offence_severity = 0
-    loss_total_kd = 0
-    loss_total_kd_action = 0
-    loss_total_kd_offence_severity = 0
     total_loss = 0
+    loss_total_kdl = 0
 
     if not os.path.isdir(model_name):
         os.mkdir(model_name)
@@ -233,10 +233,13 @@ def train(dataloader,
         for targets_offence_severity, targets_action, mvclips, action in dataloader:
             single_view_loss_action = torch.tensor(0.0, device=device)
             single_view_loss_offence_severity = torch.tensor(0.0, device=device)
+            kdl_loss_offence_severity = torch.tensor(0.0, device=device)
+            kdl_loss_action = torch.tensor(0.0, device=device)
 
             targets_offence_severity = targets_offence_severity.to(device)
             targets_action = targets_action.to(device)
             mvclips = mvclips.to(device).float()
+            batch_size, total_views, _, _, _, _ = mvclips.shape
 
             if pbar is not None:
                 pbar.update()
@@ -244,11 +247,39 @@ def train(dataloader,
             # compute output
             student_outputs = student_model(mvclips)
             student_outputs_offence_severity = student_outputs['mv_collection']['offence_logits']
-            student_outputs_action= student_outputs['mv_collection']['action_logits']
+            student_outputs_action = student_outputs['mv_collection']['action_logits']
 
             with torch.no_grad():
-                teacher_outputs_offence_severity = teacher_offence_model(mvclips)['mv_collection']['offence_logits']
-                teacher_outputs_action = teacher_action_model(mvclips)['mv_collection']['action_logits']
+
+                for teacher_model in teacher_models_list:
+                    teacher_outputs = teacher_model(mvclips)
+                    kdl_loss_offence_severity += kdl_loss(
+                        teacher_outputs['mv_collection']['offence_logits'],
+                        student_outputs_offence_severity
+                    )
+                    kdl_loss_action += kdl_loss(
+                        teacher_outputs['mv_collection']['action_logits'],
+                        student_outputs_action
+                    )
+
+            for view_id in range(total_views):
+                single_label_id = f"single_{view_id}"
+
+                # single_view output
+                single_view_offence_output = student_outputs[single_label_id]["offence_logits"]
+                single_view_action_output = student_outputs[single_label_id]['action_logits']
+
+                if len(single_view_offence_output.size()) == 1:
+                    single_view_offence_output = single_view_offence_output.unsqueeze(0)
+                    single_view_action_output = single_view_action_output.unsqueeze(0)
+
+                # compute total_single_view_loss
+                single_view_loss_offence_severity += 0.1 * ce_weight * criterion[0](
+                    single_view_offence_output, targets_offence_severity
+                )
+                single_view_loss_action += 0.1 * ce_weight * criterion[1](
+                    single_view_action_output, targets_action
+                )
 
             if len(action) == 1:
 
@@ -296,20 +327,17 @@ def train(dataloader,
 
             if len(student_outputs_offence_severity.size()) == 1:
                 student_outputs_offence_severity = student_outputs_offence_severity.unsqueeze(0)
-                teacher_outputs_offence_severity = teacher_outputs_offence_severity.unsqueeze(0)
-            if len(student_outputs_action.size()) == 1:
                 student_outputs_action = student_outputs_action.unsqueeze(0)
-                teacher_outputs_action = teacher_outputs_action.unsqueeze(0)
 
                 # compute the custom_loss
-            loss_offence_severity = criterion[0](student_outputs_offence_severity, targets_offence_severity)
-            loss_action = criterion[1](student_outputs_action, targets_action)
+            loss_offence_severity = ce_weight * criterion[0](
+                student_outputs_offence_severity, targets_offence_severity
+            )
+            loss_action = ce_weight * criterion[1](student_outputs_action, targets_action)
 
-            loss_kd_offence_severity = kd_loss(teacher_outputs_offence_severity, student_outputs_offence_severity)
-            loss_kd_action = kd_loss(teacher_outputs_action, student_outputs_action)
-            loss_knowledge_distillation = loss_kd_action + loss_kd_offence_severity
-
-            loss = loss_offence_severity + loss_action + loss_knowledge_distillation
+            loss = loss_offence_severity + loss_action + kdl_loss_offence_severity + kdl_loss_action
+            loss += single_view_loss_offence_severity
+            loss += single_view_loss_action
 
             if train:
                 # compute gradient and do SGD step
@@ -318,9 +346,10 @@ def train(dataloader,
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 optimizer.step()
 
-            loss_total_action += float(loss_action)
-            loss_total_offence_severity += float(loss_offence_severity)
-            loss_total_kd += float(loss_knowledge_distillation)
+            loss_total_action += float(loss_action+single_view_loss_action)
+            loss_total_offence_severity += float(loss_offence_severity+single_view_loss_offence_severity)
+            loss_total_kdl += float(kdl_loss_offence_severity + kdl_loss_action)
+
             total_loss += 1
             if writer is not None:
                 writer.add_scalars(
@@ -329,7 +358,7 @@ def train(dataloader,
                         f"action - {model_name}": loss_total_action,
                         f"offence - {model_name}": loss_total_offence_severity,
                         f"total - {model_name}": loss_total_offence_severity + loss_total_action,
-                        f"total kld - {model_name}": loss_total_kd,
+                        f"total kdl- {model_name}": loss_total_kdl,
                     },
                     epoch + 1
                 )
@@ -342,7 +371,7 @@ def train(dataloader,
     return (os.path.join(model_name, multi_view_prediction_file),
             loss_total_action / total_loss,
             loss_total_offence_severity / total_loss,
-            loss_total_kd/total_loss
+            loss_total_kdl/total_loss
             )
 
 
