@@ -9,14 +9,14 @@ from torchvision.io.video import read_video
 
 class MultiViewDatasetHybrid(Dataset):
     def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None,video_shift_aug=0,
-                 weight_exp_alpha = 8.0, weight_exp_bias = 0.02, weight_exp_gamma =1.0, crop25 =0):
+                 weight_exp_alpha=8.0, weight_exp_bias=0.02, weight_exp_gamma=1.0, crop25=0, random_evaluation=0):
 
         if split != 'chall':
             # To load the annotations
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity, self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(
                 path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
-            #self.clips = self.clips[:10]
+            # self.clips = self.clips[:10]
             # print(len(self.labels_action)/(8 *self.distribution_action))
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity,
                                                            len(self.labels_offence_severity))
@@ -36,7 +36,6 @@ class MultiViewDatasetHybrid(Dataset):
                 bias_value=weight_exp_bias,
                 gamma=weight_exp_gamma
             )
-
             self.video_shift_aug = video_shift_aug
         else:
             self.clips = clips2vectormerge(path, split, num_views, [])
@@ -64,11 +63,10 @@ class MultiViewDatasetHybrid(Dataset):
         self.transform = transform
         self.transform_model = transform_model
         self.num_views = num_views
-
+        self.random_evaluation = random_evaluation
         self.factor = (end - start) / (((end - start) / 25) * fps)
         self.length = len(self.clips)
         self.crop25 = crop25
-        print(self.length)
 
     def getDistribution(self):
         return self.distribution_offence_severity, self.distribution_action,
@@ -101,7 +99,7 @@ class MultiViewDatasetHybrid(Dataset):
             # As we use a batch size > 1 during training, we always randomly select two views even if we have more than two views.
             # As the batch size during validation and testing is 1, we can have 2, 3 or 4 views per action.
             cont = True
-            if self.split != 'chal2':
+            if self.split == 'train' or self.random_evaluation > 0:
                 while cont:
                     aux = random.randint(0, len(self.clips[index]) - 1)
                     if aux not in prev_views:
@@ -109,7 +107,6 @@ class MultiViewDatasetHybrid(Dataset):
                 index_view = aux
                 prev_views.append(index_view)
 
-            # print(self.clips[index][index_view])
             video, _, _ = read_video(self.clips[index][index_view], output_format="THWC", pts_unit='sec')
             if self.split == 'train' and self.video_shift_aug > 0:
                 rand_shift = random.randint(-self.video_shift_aug, self.video_shift_aug)
@@ -149,9 +146,9 @@ class MultiViewDatasetHybrid(Dataset):
 
         if self.split != 'chall':
             return self.labels_offence_severity[index][0], self.labels_action[index][0], videos, self.number_of_actions[
-                index]
+                index], prev_views
         else:
-            return -1, -1, videos, str(index)
+            return -1, -1, videos, str(index), prev_views
 
     def __len__(self):
         return  self.length

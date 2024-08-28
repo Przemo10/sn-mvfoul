@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.nn.functional as F
 import gc
 from config.classes import INVERSE_EVENT_DICTIONARY
 import json
@@ -11,6 +12,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from src.custom_trainers.training_history import get_best_n_metric_result, find_highest_leaderboard_index
 from src.custom_trainers.training_history import update_epoch_results_dict, TRAINING_RESULT_DICT
 import numpy as np
+from itertools import combinations
 from src.custom_trainers.training_history import save_training_history, get_leaderboard_summary
 
 
@@ -186,7 +188,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
     multi_view_data = {"Set": set_name, "Actions": {}}
 
     with torch.set_grad_enabled(train):
-        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+        for targets_offence_severity, targets_action, mvclips, action, _ in dataloader:
             single_view_loss_action = torch.tensor(0.0, device=device)
             single_view_loss_offence_severity = torch.tensor(0.0, device=device)
 
@@ -316,14 +318,13 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
             loss_total_offence_severity / total_loss
             )
 
-
 def sklearn_evaluation(dataloader,
                        model,
                        model_name="",
                        set_name="train",
                        ):
-    prediction_file = "sklearn_summary_xin_attention_" + model_name + "_" + set_name + ".json"
 
+    prediction_file = "sklearn_summary_" + model_name + "_" + set_name + ".json"
     model.eval()
     offence_labels = ["No offence", "Offence-no card", "Offence yellow", "Offence red"]
     action_labels = [INVERSE_EVENT_DICTIONARY["action_class"][i] for i in range(0, 8)]
@@ -336,26 +337,29 @@ def sklearn_evaluation(dataloader,
     data["model_name"] = model_name
 
     with torch.no_grad():
-        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+        for targets_offence_severity, targets_action, mvclips, action,_ in dataloader:
             targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
             targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
             mvclips = mvclips.cuda().float()
-            output = model(mvclips)
-            outputs_offence_severity = output['mv_collection']['offence_logits']
-            outputs_action = output['mv_collection']['action_logits']
-            targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
-            targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
-            mvclips = mvclips.cuda().float()
-            output = model(mvclips)
-            outputs_offence_severity = output['mv_collection']['offence_logits']
-            outputs_action = output['mv_collection']['action_logits']
-            preds_sev = torch.argmax(outputs_offence_severity, 1)
-            preds_act = torch.argmax(outputs_action, 1)
-            targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
-            targets_action_list.extend(targets_action_int_or_list)
-            pred_offence_list.extend(preds_sev.detach().cpu().numpy().tolist())
-            pred_action_list.extend(preds_act.cpu().numpy().tolist())
+            outputs = model(mvclips)
+            outputs_offence_severity = outputs['mv_collection']['offence_logits']
+            outputs_action = outputs['mv_collection']['action_logits']
 
+            if len(action) == 1:
+                preds_sev = torch.argmax(outputs_offence_severity, 0)
+                preds_act = torch.argmax(outputs_action, 0)
+                # add elements into list
+                targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
+                targets_action_list.extend(targets_action_int_or_list)
+                pred_offence_list.append(preds_sev.detach().cpu().numpy().tolist())
+                pred_action_list.append(preds_act.cpu().numpy().tolist())
+            else:
+                preds_sev = torch.argmax(outputs_offence_severity, 1)
+                preds_act = torch.argmax(outputs_action, 1)
+                targets_offence_severity_list.extend(targets_offence_severity_int_or_list)
+                targets_action_list.extend(targets_action_int_or_list)
+                pred_offence_list.extend(preds_sev.detach().cpu().numpy().tolist())
+                pred_action_list.extend(preds_act.cpu().numpy().tolist())
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -366,6 +370,8 @@ def sklearn_evaluation(dataloader,
     cm_offence = confusion_matrix(
         targets_offence_severity_map_list, preds_offence_map_list, labels=offence_labels
     ).tolist()
+
+    print("**********")
 
     cm_action = confusion_matrix(
         targets_action_map_list, preds_action_map_list, labels=action_labels
@@ -391,63 +397,95 @@ def sklearn_evaluation(dataloader,
 def evaluation(dataloader,
                model,
                set_name="test",
+               model_name=""
                ):
     model.eval()
 
-    multi_view_prediction_file = f"multi_view_predictions_{set_name}.json"
+    multi_view_prediction_file = f"multi_view_predictions_{set_name}_xin_atten.json"
     multi_view_data = {"Set": set_name, "Actions": {}}
+    clips_info = []
 
     if True:
-        for _, _, mvclips, action in dataloader:
+        for _, _, mvclips, action, prev_views in dataloader:
+
+            prev_views_list = [t.item() for t in prev_views]
+            action_int = int(action[0])
+
+            video_summary = {}
+            video_summary["action"] = action_int
+            video_summary["clips_ids"] = prev_views_list
 
             mvclips = mvclips.cuda().float()
             # mvclips = mvclips.float()
-            output = model(mvclips)
-            multi_view_offence_output = output['mv_collection']['offence_logits']
-            multi_view_action_output = output['mv_collection']['action_logits']
-            if len(action) == 1:
-                preds_sev = torch.argmax(multi_view_offence_output, 0)
-                preds_act = torch.argmax(multi_view_action_output, 0)
+            output= model(mvclips)
+            if 'mv_collection' in list(output.keys()):
+                multi_view_offence_output = output['mv_collection']['offence_logits']
+                multi_view_action_output = output['mv_collection']['action_logits']
 
-                values = {}
-                values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
-                if preds_sev.item() == 0:
-                    values["Offence"] = "No offence"
-                    values["Severity"] = ""
-                elif preds_sev.item() == 1:
-                    values["Offence"] = "Offence"
-                    values["Severity"] = "1.0"
-                elif preds_sev.item() == 2:
-                    values["Offence"] = "Offence"
-                    values["Severity"] = "3.0"
-                elif preds_sev.item() == 3:
-                    values["Offence"] = "Offence"
-                    values["Severity"] = "5.0"
-                multi_view_data["Actions"][action[0]] = values
-            else:
-                preds_sev = torch.argmax(multi_view_offence_output .detach().cpu(), 1)
-                preds_act = torch.argmax(multi_view_action_output.detach().cpu(), 1)
+                offence_probs = F.softmax(multi_view_offence_output, dim=-1).cpu().detach().numpy()
+                offence_probs = np.round(offence_probs, 4).astype(float).tolist()
 
-                for i in range(len(action)):
+                # Calculate softmax probabilities for action_logits
+                action_probs = F.softmax(multi_view_action_output, dim=-1).cpu().detach().numpy()
+                action_probs = np.round(action_probs, 4).astype(float).tolist()
+
+                video_summary["offence_logits"] = np.round(multi_view_offence_output.cpu().detach().numpy(), 4).astype(
+                    float).tolist()
+                video_summary["action_logits"] = np.round(multi_view_action_output.cpu().detach().numpy(), 4).astype(
+                    float).tolist()
+
+                video_summary["offence_probs"] = offence_probs
+                video_summary["action_probs"] = action_probs
+
+                clips_info.append(video_summary)
+
+
+                if len(action) == 1:
+
+                    preds_sev = torch.argmax(multi_view_offence_output, 0)  # dla video-mae
+                    preds_act = torch.argmax(multi_view_action_output, 0)
+
                     values = {}
-                    values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act[i].item()]
-                    if preds_sev[i].item() == 0:
+
+                    values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act.item()]
+                    if preds_sev.item() == 0:
                         values["Offence"] = "No offence"
                         values["Severity"] = ""
-                    elif preds_sev[i].item() == 1:
+                    elif preds_sev.item() == 1:
                         values["Offence"] = "Offence"
                         values["Severity"] = "1.0"
-                    elif preds_sev[i].item() == 2:
+                    elif preds_sev.item() == 2:
                         values["Offence"] = "Offence"
                         values["Severity"] = "3.0"
-                    elif preds_sev[i].item() == 3:
+                    elif preds_sev.item() == 3:
                         values["Offence"] = "Offence"
                         values["Severity"] = "5.0"
-                    multi_view_data["Actions"][action[i]] = values
+                    multi_view_data["Actions"][action[0]] = values
+                else:
+
+                    preds_sev = torch.argmax(multi_view_offence_output.detach().cpu(), 1)
+                    preds_act = torch.argmax(multi_view_action_output.detach().cpu(), 1)
+
+                    for i in range(len(action)):
+                        values = {}
+                        values["Action class"] = INVERSE_EVENT_DICTIONARY["action_class"][preds_act[i].item()]
+                        if preds_sev[i].item() == 0:
+                            values["Offence"] = "No offence"
+                            values["Severity"] = ""
+                        elif preds_sev[i].item() == 1:
+                            values["Offence"] = "Offence"
+                            values["Severity"] = "1.0"
+                        elif preds_sev[i].item() == 2:
+                            values["Offence"] = "Offence"
+                            values["Severity"] = "3.0"
+                        elif preds_sev[i].item() == 3:
+                            values["Offence"] = "Offence"
+                            values["Severity"] = "5.0"
+                        multi_view_data["Actions"][action[i]] = values
 
         gc.collect()
         torch.cuda.empty_cache()
 
-    with open(multi_view_prediction_file, "w") as outfile:
-        json.dump(multi_view_data, outfile)
-    return multi_view_prediction_file
+    with open(os.path.join(model_name, multi_view_prediction_file), 'w') as f:
+        json.dump(multi_view_data, f, indent=4)
+    return multi_view_prediction_file, clips_info

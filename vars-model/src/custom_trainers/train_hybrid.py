@@ -214,7 +214,7 @@ def train(dataloader, model, criterion, optimizer, epoch, model_name, train=Fals
     multi_view_data = {"Set": set_name, "Actions": {}}
 
     with torch.set_grad_enabled(train):
-        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+        for targets_offence_severity, targets_action, mvclips, action, _ in dataloader:
             view_loss_action = torch.tensor(0.0, device=device)
             view_loss_offence_severity = torch.tensor(0.0, device=device)
             view_loss = torch.tensor(0.0, device=device)
@@ -351,7 +351,7 @@ def sklearn_evaluation(dataloader,
     data["model_name"] =model_name
 
     with torch.no_grad():
-        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+        for targets_offence_severity, targets_action, mvclips, action, _ in dataloader:
             targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(),1).numpy().tolist()
             targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
             mvclips = mvclips.cuda().float()
@@ -406,7 +406,7 @@ def evaluation(dataloader,
     multi_view_data = {"Set": set_name, "Actions": {}}
 
     if True:
-        for _, _, mvclips, action in dataloader:
+        for _, _, mvclips, action, _ in dataloader:
 
             mvclips = mvclips.cuda().float()
             # mvclips = mvclips.float()

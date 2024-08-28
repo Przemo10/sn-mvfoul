@@ -11,7 +11,7 @@ from src.custom_trainers.train_xin_distill import trainer, evaluation, sklearn_e
 from src.custom_loss.loss_selector import select_training_loss
 import torchvision.transforms as transforms
 from torch.utils.data import  DataLoader
-from src.custom_model.model_selector import XIN_NET_VERSION
+from src.custom_model.model_selector import XIN_NET_VERSION, TEACHERS_CONFIG, STUDENT_CONFIG
 from torchvision.models.video import R3D_18_Weights, MC3_18_Weights
 from torchvision.models.video import R2Plus1D_18_Weights, S3D_Weights
 from torchvision.models.video import MViT_V2_S_Weights
@@ -165,7 +165,7 @@ def main(*args):
                                                    batch_size=1, shuffle=False,
                                                    num_workers=max_num_worker, pin_memory=True)
 
-    elif only_evaluation == 3:
+    elif only_evaluation ==3 :
         dataset_train = MultiViewDatasetHybrid(
             path=path,
             start=start_frame,
@@ -230,11 +230,7 @@ def main(*args):
         #scheduler = CustomStepLRScheduler(optimizer, step_size=step_size, gamma=gamma)
         epoch_start = 0
 
-        teacher_model_path_list = [
-            "models/VARS_XIN_reg01_bq23,_v25/5/mvit_v2_s/5e-05_WeightedFocal/B_4F16_G0.5_S3_mv25_pattention/11_model.pth.tar",
-            "models/VARS_XIN_reg01_bq23b,_v25/5/mvit_v2_s/5e-05_WeightedFocal/B_4F16_G0.5_S3_mv25_pattention/14_model.pth.tar",
-            "models/VARS_XIN_reg01_new_cs,_v25/5/mvit_v2_s/5e-05_WeightedFocal/B_4F16_G0.5_S3_mv25_pattention/26_model.pth.tar"
-        ]
+        teacher_model_path_list =  TEACHERS_CONFIG["max_pool"]
         teacher_models_list = []
 
         xin_network = XIN_NET_VERSION.get(net_version_t)
@@ -305,11 +301,7 @@ def main(*args):
         print(results)
 
     elif only_evaluation == 4:
-        print("Only evaluation 4")
-        evaluation_results = sklearn_evaluation(
-            train_loader, student_model, set_name="train", model_name = model_name,
-        )
-        print(evaluation_results)
+
         evaluation_results = sklearn_evaluation(
             val_loader2, student_model, set_name="valid", model_name = model_name,
         )
@@ -323,7 +315,7 @@ def main(*args):
             student_model,
             set_name="test",
         )
-        results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+        results = evaluate(os.path.join(path, f"test_{model_name}", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
 
@@ -343,17 +335,17 @@ if __name__ == '__main__':
     parser.add_argument('--loglevel', required=False, type=str, default='INFO', help='logging level')
     parser.add_argument("--continue_training", required=False, action='store_true', help="Continue training")
     parser.add_argument("--num_views", required=False, type=int, default=5, help="Number of views")
-    parser.add_argument("--data_aug", required=False, type=str, default="Yes", help="Data augmentation")
+    parser.add_argument("--data_aug", required=False, type=str, default="No", help="Data augmentation")
     parser.add_argument("--video_shift_aug", required=False, type=int, default=0, help="Number of video shifted clips")
     parser.add_argument("--pre_model_s", required=False, type=str, default="mvit_v2_s",
                         help="Name of the pretrained model")
     parser.add_argument("--pre_model_t", required=False, type=str, default="mvit_v2_s",
                         help="Name of the pretrained model")
-    parser.add_argument("--net_version_s", required=False, type=int, default=25, help="MvAggregateModelVersion")
+    parser.add_argument("--net_version_s", required=False, type=int, default=15, help="MvAggregateModelVersion")
     parser.add_argument("--net_version_t", required=False, type=int, default=25, help="MvAggregateModelVersion")
-    parser.add_argument("--pooling_type_s", required=False, type=str, default="attention",
+    parser.add_argument("--pooling_type_s", required=False, type=str, default="max",
                         help="Student model pooling type")
-    parser.add_argument("--pooling_type_t", required=False, type=str, default="attention",
+    parser.add_argument("--pooling_type_t", required=False, type=str, default="max",
                         help="Teacher model pooling type")
     parser.add_argument("--weighted_loss", required=False, type=str, default="Base",
                         help="Weighted loss version")
@@ -372,10 +364,13 @@ if __name__ == '__main__':
     parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
     parser.add_argument("--weight_decay", required=False, type=float, default=1e-3, help="Weight decacy")
-    parser.add_argument("--patience", required=False, type=int, default=15, help="Earlystopping starting from 5 epoch.")
+    parser.add_argument("--patience", required=False, type=int, default=30, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")
-    parser.add_argument("--path_to_model_weights_s", required=False, type=str, default="", help="Path to the student weights")
+    parser.add_argument("--path_to_model_weights_s",
+                        required=False, type=str,
+                        default=STUDENT_CONFIG["n1_max_pool_v2"],
+                        help="Path to the student weights")
     parser.add_argument("--kd_temp", required=False, type=float, default=4.0, help="distill_temp")
     parser.add_argument("--kd_lambda", required=False, type=float, default=0.5,  help="Weight decacy")
 

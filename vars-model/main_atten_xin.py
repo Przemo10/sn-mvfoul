@@ -4,7 +4,8 @@ import time
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from SoccerNet.Evaluation.MV_FoulRecognition import evaluate
 import torch
-from src.custom_loss.custom_step_lr_scheduler import  CustomStepLRScheduler
+import json
+# from src.custom_loss.custom_step_lr_scheduler import  CustomStepLRScheduler
 from torch.utils.tensorboard import SummaryWriter
 from src.custom_dataset.hybrid_dataset import MultiViewDatasetHybrid
 from src.custom_trainers.train_xin_attention import trainer, evaluation, sklearn_evaluation
@@ -73,7 +74,7 @@ def main(*args):
         end_frame = args.end_frame
         weight_decay = args.weight_decay
         video_shift_aug = args.video_shift_aug
-        model_name = f"{args.model_name},_v{args.net_version}"
+        model_name = f"{args.model_name}_v{args.net_version}"
         net_version = args.net_version
         pre_model = args.pre_model
         num_views = args.num_views
@@ -158,16 +159,44 @@ def main(*args):
         print("Possible options are: r3d_18, s3d, mc3_18, mvit_v2_s and r2plus1d_18")
         print("We continue with r2plus1d_18")
 
-    if only_evaluation == 0:
+    if only_evaluation in [0, 4]:
         print('Evaluation mode 0 - only test set ...')
 
-        dataset_test2 = MultiViewDatasetHybrid(path=path, start=start_frame, end=end_frame, fps=fps, split='test',
-                                     num_views=num_views,
-                                     transform_model=transforms_model)
+        dataset_test2 = MultiViewDatasetHybrid(
+            path=path,
+            start=start_frame,
+            end=end_frame,
+            fps=fps,
+            split='test',
+            num_views=5,
+            transform_model=transforms_model
+        )
 
-        test_loader2 = torch.utils.data.DataLoader(dataset_test2,
-                                                   batch_size=1, shuffle=False,
-                                                   num_workers=max_num_worker, pin_memory=True)
+        test_loader2 = torch.utils.data.DataLoader(
+            dataset_test2,
+            batch_size=1,
+            shuffle=False,
+            num_workers=max_num_worker,
+            pin_memory=False
+        )
+        if only_evaluation == 4:
+            dataset_valid = MultiViewDatasetHybrid(
+                path=path,
+                start=start_frame,
+                end=end_frame,
+                fps=fps,
+                split='valid',
+                num_views=5,
+                transform_model=transforms_model
+            )
+
+            val_loader2 = torch.utils.data.DataLoader(
+                dataset_valid,
+                batch_size=1,
+                shuffle=False,
+                num_workers=max_num_worker,
+                pin_memory=False
+            )
 
     elif only_evaluation == 3:
         dataset_train = MultiViewDatasetHybrid(
@@ -215,8 +244,10 @@ def main(*args):
     xin_network = XIN_NET_VERSION.get(net_version)
     print(xin_network, pooling_type)
     model = xin_network(num_views=num_views, net_name = pre_model, agr_type = pooling_type).cuda()
+    print(f"Path to model weights: {path_to_model_weights}")
 
     if path_to_model_weights != "":
+        print(path_to_model_weights)
         path_model = os.path.join(path_to_model_weights)
         load = torch.load(path_model)
         model.load_state_dict(load['state_dict'])
@@ -228,7 +259,7 @@ def main(*args):
                                       weight_decay=weight_decay, amsgrad=False)
 
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-        #scheduler = CustomStepLRScheduler(optimizer, step_size=step_size, gamma=gamma)
+        # scheduler = CustomStepLRScheduler(optimizer, step_size=step_size, gamma=gamma)
         epoch_start = 0
 
         if continue_training:
@@ -271,11 +302,9 @@ def main(*args):
 
     if only_evaluation == 0:
         print("Only evaluation 0")
-        evaluation_results = sklearn_evaluation(
-            test_loader2, model, set_name="test", model_name = model_name,
-        )
+        evaluation_results = sklearn_evaluation(test_loader2, model, set_name="test", model_name=model_name,)
         print(evaluation_results)
-        prediction_file = evaluation(
+        prediction_file, clips_info = evaluation(
             test_loader2,
             model,
             set_name="test",
@@ -283,30 +312,71 @@ def main(*args):
         results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
+
 
     elif only_evaluation == 4:
-        print("Only evaluation 4")
-        evaluation_results = sklearn_evaluation(
-            train_loader, model, set_name="train", model_name = model_name,
-        )
-        print(evaluation_results)
-        evaluation_results = sklearn_evaluation(
-            val_loader2, model, set_name="valid", model_name = model_name,
-        )
+
+        evaluation_results = sklearn_evaluation(val_loader2, model, set_name="valid", model_name = model_name,)
         print(evaluation_results)
         evaluation_results = sklearn_evaluation(
             test_loader2, model, set_name="test", model_name = model_name,
         )
         print(evaluation_results)
-        prediction_file = evaluation(
+        prediction_file, clips_info = evaluation(
             test_loader2,
             model,
             set_name="test",
         )
+
         results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
         print("TEST")
         print(results)
+    if only_evaluation == 10:
+        print('Evaluation mode 0 - only test set ...')
 
+        total_runs = 100
+
+        clips_summary = []
+
+        for run_id in range(total_runs):
+            dataset_test2 = MultiViewDatasetHybrid(
+                path=path,
+                start=start_frame,
+                end=end_frame,
+                fps=fps,
+                split='test',
+                num_views=5,
+                transform_model=transforms_model,
+                random_evaluation=1,
+            )
+
+            test_loader2 = torch.utils.data.DataLoader(
+                dataset_test2,
+                batch_size=1, shuffle=False,
+                num_workers=max_num_worker, pin_memory=False
+            )
+            prediction_file, clips_info = evaluation(
+                test_loader2,
+                model,
+                set_name="test",
+            )
+            results = evaluate(os.path.join(path, "test", "annotations.json"), prediction_file)
+            test_info = {
+                "run_id":  run_id,
+                "set_name": 'test',
+                "leaderboard_value": results["leaderboard_value"],
+                "results": results,
+                "clips_info": clips_info
+            }
+            clips_summary.append(test_info)
+            print(f" Run id results: {test_info['run_id']}, "
+                  f"TEST: {results}")
+
+        file_path = 'grid_search_distill_good_res.json'
+        with open(file_path, 'w') as file:
+            json.dump(clips_summary, file, indent=4)  # indent=4 for pretty formatting
+
+        print(f"List of dictionaries saved to {file_path}")
 
     return 0
 

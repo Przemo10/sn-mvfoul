@@ -43,7 +43,7 @@ def checkArguments():
         exit()
 
     # args.weighted_loss
-    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp"]:
+    if args.weighted_loss not in ["Base", "No", "Exp", "Yes", "Focal", "FocalCE", "BaseExp", "WeightedFocal"]:
         print("Could not find your desired argument for --args.weighted_loss:")
         print("Possible arguments are: Base, No, Exp, Yes, Focal, FocalCE")
         exit()

@@ -8,7 +8,8 @@ from torchvision.io.video import read_video
 
 class MultiViewDataset(Dataset):
     def __init__(self, path, start, end, fps, split, num_views, transform=None, transform_model=None,
-                 video_shift_aug=0, weight_exp_alpha = 8.0, weight_exp_bias = 0.02, weight_exp_gamma =2.0, crop25 =0
+                 video_shift_aug=0, weight_exp_alpha=8.0, weight_exp_bias=0.02, weight_exp_gamma=2.0,
+                 crop25=0,
                  ):
 
         if split != 'chall':
@@ -16,7 +17,6 @@ class MultiViewDataset(Dataset):
             self.labels_offence_severity, self.labels_action, self.distribution_offence_severity,self.distribution_action, not_taking, self.number_of_actions = label2vectormerge(path, split, num_views)
             self.clips = clips2vectormerge(path, split, num_views, not_taking)
 
-            print(self.labels_offence_severity)
             # self.clips = self.clips[:10]
             self.distribution_offence_severity = torch.div(self.distribution_offence_severity, len(self.labels_offence_severity))
             self.distribution_action = torch.div(self.distribution_action, len(self.labels_action))

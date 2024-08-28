@@ -223,7 +223,7 @@ def main(*args):
     if only_evaluation == 3:
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR,
-                                      betas=(0.9, 0.95), eps=1e-07,
+                                      betas=(0.92, 0.99), eps=1e-07,
                                       weight_decay=weight_decay, amsgrad=False)
 
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
@@ -344,7 +344,7 @@ if __name__ == '__main__':
     parser.add_argument("--fps", required=False, type=int, default=25, help="Number of frames per second")
     parser.add_argument("--step_size", required=False, type=int, default=5, help="StepLR parameter")
     parser.add_argument("--gamma", required=False, type=float, default=0.3, help="StepLR parameter")
-    parser.add_argument("--weight_decay", required=False, type=float, default=0.001, help="Weight decacy")
+    parser.add_argument("--weight_decay", required=False, type=float, default=1e-3, help="Weight decacy")
     parser.add_argument("--patience", required=False, type=int, default=15, help="Earlystopping starting from 5 epoch.")
     parser.add_argument("--only_evaluation", required=False, type=int, default=3,
                         help="Only evaluation, 0 = on test set, 1 = on chall set, 2 = on both sets and 3 = train/valid/test")

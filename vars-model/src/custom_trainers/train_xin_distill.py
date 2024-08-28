@@ -141,26 +141,23 @@ def trainer(train_loader,
         update_epoch_results_dict("test", test_results)
 
         counter += 1
+        saved_cond = np.logical_or(
+            45.0 < valid_epoch_leaderboard,
+            42.5 < test_epoch_leaderboard
+        )
+        if saved_cond:
+            state = {
+                'epoch': epoch + 1,
+                'state_dict': student_model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                "history": TRAINING_RESULT_DICT
+            }
+            path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
+            torch.save(state, path_aux)
+            save_training_history(best_model_path)
+
         if counter > 5:
-            saved_cond = np.logical_or(
-                get_best_n_metric_result("valid") < valid_epoch_leaderboard,
-                get_best_n_metric_result("test") < test_epoch_leaderboard
-            )
-            saved_cond = np.logical_or(
-                saved_cond,
-                epoch + 3 >= max_epochs
-            )
-            if saved_cond:
-                state = {
-                    'epoch': epoch + 1,
-                    'state_dict': student_model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    "history": TRAINING_RESULT_DICT
-                }
-                path_aux = os.path.join(best_model_path, str(epoch + 1) + "_model.pth.tar")
-                torch.save(state, path_aux)
-                save_training_history(best_model_path)
             # Early stopping
             if valid_epoch_leaderboard > np.max(TRAINING_RESULT_DICT['valid']['leaderboard_value'][:-1]):
                 patience = patience_counter
@@ -230,7 +227,7 @@ def train(dataloader,
     multi_view_data = {"Set": set_name, "Actions": {}}
 
     with torch.set_grad_enabled(train):
-        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+        for targets_offence_severity, targets_action, mvclips, action, prev_views in dataloader:
             single_view_loss_action = torch.tensor(0.0, device=device)
             single_view_loss_offence_severity = torch.tensor(0.0, device=device)
             kdl_loss_offence_severity = torch.tensor(0.0, device=device)
@@ -380,7 +377,7 @@ def sklearn_evaluation(dataloader,
                        model_name="",
                        set_name="train",
                        ):
-    prediction_file = "sklearn_summary_xin_attention_" + model_name + "_" + set_name + ".json"
+    prediction_file = "sklearn_summary_distill_xin_attention_" + model_name + "_" + set_name + ".json"
 
     model.eval()
     offence_labels = ["No offence", "Offence-no card", "Offence yellow", "Offence red"]
@@ -394,7 +391,7 @@ def sklearn_evaluation(dataloader,
     data["model_name"] = model_name
 
     with torch.no_grad():
-        for targets_offence_severity, targets_action, mvclips, action in dataloader:
+        for targets_offence_severity, targets_action, mvclips, action, prev_views in dataloader:
             targets_offence_severity_int_or_list = torch.argmax(targets_offence_severity.cpu(), 1).numpy().tolist()
             targets_action_int_or_list = torch.argmax(targets_action.cpu(), 1).numpy().tolist()
             mvclips = mvclips.cuda().float()
@@ -456,7 +453,7 @@ def evaluation(dataloader,
     multi_view_data = {"Set": set_name, "Actions": {}}
 
     if True:
-        for _, _, mvclips, action in dataloader:
+        for _, _, mvclips, action, prev_views in dataloader:
 
             mvclips = mvclips.cuda().float()
             # mvclips = mvclips.float()
