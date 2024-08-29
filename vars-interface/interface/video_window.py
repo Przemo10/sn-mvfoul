@@ -11,7 +11,7 @@ import json
 import os
 from moviepy.editor import *
 from moviepy.config import get_setting
-from interface.model import MVNetwork
+from interface.src.custom_model.xin_net_n2 import XinMultimodalNetN25
 import torch
 from torchvision.io.video import read_video
 import torch.nn as nn
@@ -29,9 +29,9 @@ class VideoWindow(QMainWindow):
         rootdir = os.getcwd()
 
         # Load model
-        self.model = MVNetwork(net_name="mvit_v2_s", agr_type="attention")
+        self.model = XinMultimodalNetN25(net_name="mvit_v2_s", agr_type="max", num_views=5)
         path = os.path.join(rootdir, 'interface')
-        path = os.path.join(path, '14_model.pth.tar')
+        path = os.path.join(path, '11_model.pth.tar')
         path = path.replace('\\', '/' )
 
         # Load weights
@@ -511,9 +511,9 @@ class VideoWindow(QMainWindow):
                         videos = torch.cat((videos, final_frames), 0)
                 #(Views), Channel, Depth, Height, Width
                 videos = videos.unsqueeze(0)
-                pred = self.model(videos)
+                pred = self.model(videos)["mv_collection"]
 
-                pred1 = pred[1]
+                pred1 = pred["action_logits"]
                 pred1 = pred1.unsqueeze(0)
                 prediction = self.softmax(pred1)
                 values, index = torch.topk(prediction, 2)
@@ -521,9 +521,10 @@ class VideoWindow(QMainWindow):
                 self.prediction3Text.setText(INVERSE_EVENT_DICTIONARY_action_class[index[0][0].item()] + ": " + "{:.2f}".format(values[0][0].item()))
                 self.prediction4Text.setText(INVERSE_EVENT_DICTIONARY_action_class[index[0][1].item()] + ": " + "{:.2f}".format(values[0][1].item()))
 
-                pred1 = pred[0]
+                pred1 = pred["offence_logits"]
                 pred1 = pred1.unsqueeze(0)
                 prediction = self.softmax(pred1)
+                print(prediction)
                 values, index = torch.topk(prediction, 2)
 
                 self.prediction1Text.setText(INVERSE_EVENT_DICTIONARY_offence_severity_class[index[0][0].item()] + ": " + "{:.2f}".format(values[0][0].item()))
@@ -565,6 +566,8 @@ class VideoWindow(QMainWindow):
 
                     offence_severity_text = data_json['Actions'][index]["Offence"] + severity_text
                     self.offenceText.setText(offence_severity_text)
+
+            print("HERE 2")
 
             self.label.hide()
             cou = 0
